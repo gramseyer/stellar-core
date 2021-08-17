@@ -375,6 +375,12 @@ class AbstractLedgerTxnParent
     getOffersByAccountAndAsset(AccountID const& account,
                                Asset const& asset) = 0;
 
+    // Get XDR for every pool share trust line owned by the specified account
+    // that contains the specified asset.
+    virtual UnorderedMap<LedgerKey, LedgerEntry>
+    getPoolShareTrustLinesByAccountAndAsset(AccountID const& account,
+                                            Asset const& asset) = 0;
+
     // getHeader returns the LedgerHeader stored by AbstractLedgerTxnParent.
     // Used to allow the LedgerHeader to propagate to a child.
     virtual LedgerHeader const& getHeader() const = 0;
@@ -596,6 +602,12 @@ class AbstractLedgerTxn : public AbstractLedgerTxnParent
     getSpeedexIOCOffers() const = 0;
 
     virtual void addSpeedexIOCOffer(AssetPair assetPair, const IOCOffer& offer) = 0;
+    // Loads every pool share trust line owned by the specified account that
+    // contains the specified asset. This function is built on top of load, so
+    // it shares many properties with that function.
+    virtual std::vector<LedgerTxnEntry>
+    loadPoolShareTrustLinesByAccountAndAsset(AccountID const& account,
+                                             Asset const& asset) = 0;
 
     // queryInflationWinners is a wrapper around getInflationWinners that throws
     // if the AbstractLedgerTxn is sealed or if the AbstractLedgerTxn has a
@@ -662,6 +674,10 @@ class LedgerTxn : public AbstractLedgerTxn
                                Asset const& asset) override;
 
     // ok why is there a getHeader and a loadHeader method
+    UnorderedMap<LedgerKey, LedgerEntry>
+    getPoolShareTrustLinesByAccountAndAsset(AccountID const& account,
+                                            Asset const& asset) override;
+
     LedgerHeader const& getHeader() const override;
 
     std::vector<InflationWinner>
@@ -702,6 +718,10 @@ class LedgerTxn : public AbstractLedgerTxn
     std::vector<LedgerTxnEntry>
     loadOffersByAccountAndAsset(AccountID const& accountID,
                                 Asset const& asset) override;
+
+    std::vector<LedgerTxnEntry>
+    loadPoolShareTrustLinesByAccountAndAsset(AccountID const& account,
+                                             Asset const& asset) override;
 
     ConstLedgerTxnEntry
     loadWithoutRecord(InternalLedgerKey const& key) override;
@@ -801,6 +821,9 @@ class LedgerTxnRoot : public AbstractLedgerTxnParent
 
     //IOCOrderbookManager const&
     //getSpeedexIOCOffers() const override;
+    UnorderedMap<LedgerKey, LedgerEntry>
+    getPoolShareTrustLinesByAccountAndAsset(AccountID const& account,
+                                            Asset const& asset) override;
 
     LedgerHeader const& getHeader() const override;
 

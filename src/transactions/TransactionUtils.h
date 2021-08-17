@@ -40,21 +40,26 @@ AccountEntryExtensionV1& prepareAccountEntryExtensionV1(AccountEntry& ae);
 AccountEntryExtensionV2& prepareAccountEntryExtensionV2(AccountEntry& ae);
 TrustLineEntry::_ext_t::_v1_t&
 prepareTrustLineEntryExtensionV1(TrustLineEntry& tl);
+TrustLineEntryExtensionV2& prepareTrustLineEntryExtensionV2(TrustLineEntry& tl);
 LedgerEntryExtensionV1& prepareLedgerEntryExtensionV1(LedgerEntry& le);
 
 AccountEntryExtensionV2& getAccountEntryExtensionV2(AccountEntry& ae);
 AccountEntryExtensionV3& getAccountEntryExtensionV3(AccountEntry& ae);
 AccountEntryExtensionV3 const& getAccountEntryExtensionV3(AccountEntry const& ae);
 
+TrustLineEntryExtensionV2& getTrustLineEntryExtensionV2(TrustLineEntry& le);
 LedgerEntryExtensionV1& getLedgerEntryExtensionV1(LedgerEntry& le);
 
 LedgerKey accountKey(AccountID const& accountID);
 LedgerKey trustlineKey(AccountID const& accountID, Asset const& asset);
+LedgerKey trustlineKey(AccountID const& accountID, TrustLineAsset const& asset);
 LedgerKey offerKey(AccountID const& sellerID, uint64_t offerID);
 LedgerKey dataKey(AccountID const& accountID, std::string const& dataName);
 LedgerKey claimableBalanceKey(ClaimableBalanceID const& balanceID);
 LedgerKey liquidityPoolKey(PoolID const& poolID);
 LedgerKey speedexConfigKey();
+LedgerKey poolShareTrustLineKey(AccountID const& accountID,
+                                PoolID const& poolID);
 InternalLedgerKey sponsorshipKey(AccountID const& sponsoredID);
 InternalLedgerKey sponsorshipCounterKey(AccountID const& sponsoringID);
 InternalLedgerKey speedexIOCBatchKey();
@@ -103,6 +108,11 @@ LedgerTxnEntry loadSponsorshipCounter(AbstractLedgerTxn& ltx,
 LedgerTxnEntry loadSpeedexConfig(AbstractLedgerTxn& ltx);
 
 SpeedexConfigEntryFrame loadSpeedexConfigSnapshot(AbstractLedgerTxn& ltx);
+LedgerTxnEntry loadPoolShareTrustLine(AbstractLedgerTxn& ltx,
+                                      AccountID const& accountID,
+                                      PoolID const& poolID);
+
+LedgerTxnEntry loadLiquidityPool(AbstractLedgerTxn& ltx, PoolID const& poolID);
 
 void acquireLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header,
                         LedgerTxnEntry const& offer);
@@ -173,7 +183,7 @@ bool isAuthorized(LedgerEntry const& le);
 bool isAuthorized(LedgerTxnEntry const& entry);
 bool isAuthorized(ConstLedgerTxnEntry const& entry);
 
-bool isAuthorizedToMaintainLiabilities(uint32_t flags);
+bool isAuthorizedToMaintainLiabilitiesUnsafe(uint32_t flags);
 bool isAuthorizedToMaintainLiabilities(LedgerEntry const& le);
 bool isAuthorizedToMaintainLiabilities(LedgerTxnEntry const& entry);
 bool isAuthorizedToMaintainLiabilities(ConstLedgerTxnEntry const& entry);
@@ -224,6 +234,7 @@ uint64_t getUpperBoundCloseTimeOffset(Application& app, uint64_t lastCloseTime);
 
 bool hasAccountEntryExtV2(AccountEntry const& ae);
 bool hasAccountEntryExtV3(AccountEntry const& ae);
+bool hasTrustLineEntryExtV2(TrustLineEntry const& tl);
 
 Asset getAsset(AccountID const& issuer, AssetCode const& assetCode);
 Asset getNativeAsset();
@@ -242,4 +253,8 @@ TrustLineAsset assetToTrustLineAsset(Asset const& asset);
 TrustLineAsset
 changeTrustAssetToTrustLineAsset(ChangeTrustAsset const& ctAsset);
 ChangeTrustAsset assetToChangeTrustAsset(Asset const& asset);
+
+int64_t getPoolWithdrawalAmount(int64_t amountPoolShares,
+                                int64_t totalPoolShares, int64_t reserve);
+
 }
