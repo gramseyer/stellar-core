@@ -94,3 +94,5 @@ min-testcases/
 *.vcxproj.user
 **/.vs/*
 
+**/.DS_STORE
+#*/*/.DS_STORE
