@@ -3,17 +3,36 @@
 #include "ledger/AssetPair.h"
 
 #include "speedex/IOCOrderbook.h"
+#include "speedex/BatchSolution.h"
 
 #include "util/UnorderedMap.h"
 
 namespace stellar {
 
-class IOCOrderbookManager {
+class AbstractLedgerTxn;
+class BatchClearingTarget;
+class OrderbookClearingTarget;
 
+class IOCOrderbookManager {
 	UnorderedMap<AssetPair, IOCOrderbook, AssetPairHash> mOrderbooks;
+
+	bool mSealed;
+
+	void clearOrderbook(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target);
+
+	void throwIfSealed() const;
+	void throwIfNotSealed() const;
+
+	IOCOrderbook&
+	getOrCreateOrderbook(AssetPair assetPair);
+
+	void returnToSource(AbstractLedgerTxn& ltx, Asset asset, int64_t amount);
+
 
 
 public:
+
+	IOCOrderbookManager() : mSealed(false) {}
 
 	void addOffer(AssetPair assetPair, const IOCOffer& offer);
 
@@ -21,6 +40,9 @@ public:
 
 	void clear();
 
+	void sealBatch();
+
+	void clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& batchSolution);
 
 };
 

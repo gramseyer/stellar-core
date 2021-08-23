@@ -1646,17 +1646,18 @@ LedgerTxn::Impl::addSpeedexIOCOffer(AssetPair assetPair, const IOCOffer& offer) 
     mSpeedexIOCOrderbooks.addOffer(assetPair, offer);
 }
 
-IOCOrderbookManager const&
-LedgerTxn::getSpeedexIOCOffers() const {
+IOCOrderbookManager &
+LedgerTxn::getSpeedexIOCOffers() {
     return getImpl() -> getSpeedexIOCOffers();
 }
 
-IOCOrderbookManager const& 
-LedgerTxn::Impl::getSpeedexIOCOffers() const {
+IOCOrderbookManager & 
+LedgerTxn::Impl::getSpeedexIOCOffers() {
     throwIfChild();
     throwIfSealed();
     //TODO some check to see whether parent has any offers that aren't included here?
     return mSpeedexIOCOrderbooks;
+}
 
 std::vector<LedgerTxnEntry>
 LedgerTxn::loadPoolShareTrustLinesByAccountAndAsset(AccountID const& account,

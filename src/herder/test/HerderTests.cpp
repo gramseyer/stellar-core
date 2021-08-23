@@ -347,7 +347,7 @@ testTxSet(uint32 protocolVersion)
             }
             SECTION("gap begin")
             {
-                txSet->removeTx(txSet->sortForApply()[0]);
+                txSet->removeTx(txSet->sortForApply().second[0]);
                 txSet->sortForHash();
                 REQUIRE(!txSet->checkValid(*app, 0, 0));
 
@@ -892,7 +892,7 @@ surgeTest(uint32 protocolVersion, uint32_t nbTxs, uint32_t maxTxSetSize,
         REQUIRE(txSet->size(lhCopy) == cfg.TESTING_UPGRADE_MAX_TX_SET_SIZE);
         REQUIRE(txSet->checkValid(*app, 0, 0));
         // check that the expected tx are there
-        auto txs = txSet->sortForApply();
+        auto txs = txSet->sortForApply().second;
         for (auto& tx : txs)
         {
             refSeqNum++;
@@ -979,7 +979,7 @@ surgeTest(uint32 protocolVersion, uint32_t nbTxs, uint32_t maxTxSetSize,
         REQUIRE(txSet->size(lhCopy) == expectedReduced);
         REQUIRE(txSet->checkValid(*app, 0, 0));
         // check that the expected tx are there
-        auto txs = txSet->sortForApply();
+        auto txs = txSet->sortForApply().second;
         int nbAccountB = 0;
         for (auto& tx : txs)
         {

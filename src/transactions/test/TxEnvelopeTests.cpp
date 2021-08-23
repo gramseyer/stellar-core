@@ -69,7 +69,7 @@ TEST_CASE("txset - correct apply order", "[tx][envelope]")
     txSet->add(tx2);
 
     // Sort for apply re-orders transaction set
-    auto txs = txSet->sortForApply();
+    auto txs = txSet->sortForApply().second;
     REQUIRE(txs.size() == 2);
     REQUIRE(txs[1]->getFullHash() == tx1->getFullHash());
     REQUIRE(txs[0]->getFullHash() == tx2->getFullHash());

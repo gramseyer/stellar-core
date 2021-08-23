@@ -3,6 +3,7 @@
 #include <cstdint>
 #include "ledger/AssetPair.h"
 #include "ledger/LedgerHashUtils.h"
+#include "util/XDROperators.h"
 #include "util/UnorderedMap.h"
 
 namespace stellar {

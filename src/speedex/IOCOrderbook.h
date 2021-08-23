@@ -7,12 +7,17 @@
 #include <set>
 #include <vector>
 
+#include "speedex/OrderbookClearingTarget.h"
+#include "speedex/LiquidityPoolFrame.h"
+
 namespace stellar {
 
 struct IOCOrderbookClearingParams {
 	Price clearingRatio;
 	int64_t totalSellAmount;
 };
+
+class AbstractLedgerTxn;
 
 class IOCOrderbook {
 
@@ -32,6 +37,11 @@ class IOCOrderbook {
 
 	std::vector<PriceCompStats> mPrecomputedTatonnementData;
 
+	bool mCleared;
+
+	void throwIfCleared();
+	void throwIfNotCleared();
+
 public:
 	IOCOrderbook(AssetPair tradingPair);
 
@@ -39,9 +49,11 @@ public:
 
 	void addOffer(IOCOffer offer);
 
-	std::set<IOCOffer>& getOffers();
-
 	void commitChild(const IOCOrderbook& child);
+
+	void clearOffers(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target, LiquidityPoolFrame& lpFrame);
+
+	void finish();
 };
 
 

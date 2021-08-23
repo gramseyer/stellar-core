@@ -14,8 +14,7 @@ enum class InternalLedgerEntryType
 {
     LEDGER_ENTRY,
     SPONSORSHIP,
-    SPONSORSHIP_COUNTER,
-    SPEEDEX_IOC_BATCH
+    SPONSORSHIP_COUNTER
 };
 
 struct SponsorshipKey

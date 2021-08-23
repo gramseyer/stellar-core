@@ -3740,12 +3740,12 @@ TEST_CASE("LedgerTxn best offers cache eviction", "[ledgertxn]")
 typedef std::map<std::tuple<AccountID, Asset, Asset>, int64_t> PoolShareUpdates;
 typedef std::map<std::pair<Asset, Asset>, int64_t> LiquidityPoolUpdates;
 
-static PoolID
-getPoolID(Asset const& assetA, Asset const& assetB)
-{
-    return sha256(xdr::xdr_to_opaque(LIQUIDITY_POOL_CONSTANT_PRODUCT, assetA,
-                                     assetB, LIQUIDITY_POOL_FEE_V18));
-}
+//static PoolID
+//getPoolID(Asset const& assetA, Asset const& assetB)
+//{
+//    return sha256(xdr::xdr_to_opaque(LIQUIDITY_POOL_CONSTANT_PRODUCT, assetA,
+//                                     assetB, LIQUIDITY_POOL_FEE_V18));
+//}
 
 static void
 applyLedgerTxnUpdates(AbstractLedgerTxn& ltx, PoolShareUpdates const& updates)

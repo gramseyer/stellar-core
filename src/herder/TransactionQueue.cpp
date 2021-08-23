@@ -80,6 +80,14 @@ canReplaceByFee(TransactionFrameBasePtr tx, TransactionFrameBasePtr oldTx,
     int64_t oldFee = oldTx->getFeeBid();
     uint32_t oldNumOps = std::max<uint32_t>(1, oldTx->getNumOperations());
 
+    // More effective way would be to track for each account where the boundary between
+    // commutative txs and noncommutative txs is, and then check this condition
+    // or that the tx is on the boundary.
+    if (tx -> isCommutativeTransaction() != oldTx -> isCommutativeTransaction()) {
+        minFee = INT64_MAX;
+        return false;
+    }
+
     // newFee / newNumOps >= FEE_MULTIPLIER * oldFee / oldNumOps
     // is equivalent to
     // newFee * oldNumOps >= FEE_MULTIPLIER * oldFee * newNumOps
@@ -159,7 +167,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
         return TransactionQueue::AddResult::ADD_STATUS_FILTERED;
     }
 
-    int64_t netFee = tx->getFeeBid();
+    //int64_t netFee = tx->getFeeBid();
     int64_t seqNum = 0;
     TransactionFrameBasePtr oldTx;
 
@@ -207,14 +215,12 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                         return TransactionQueue::AddResult::ADD_STATUS_ERROR;
                     }
 
-                    //needs delta calc in asset reqs
-
-                    oldTx = oldTxIter->mTx;
-                    int64_t oldFee = oldTx->getFeeBid();
-                    if (oldTx->getFeeSourceID() == tx->getFeeSourceID())
-                    {
-                        netFee -= oldFee;
-                    }
+                  //  oldTx = oldTxIter->mTx;
+                    //int64_t oldFee = oldTx->getFeeBid();
+                    //if (oldTx->getFeeSourceID() == tx->getFeeSourceID())
+                   // {
+                   //     netFee -= oldFee;
+                   // }
                 }
 
                 seqNum = tx->getSeqNum() - 1;

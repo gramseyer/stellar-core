@@ -77,7 +77,7 @@ TxSimTxSetFrame::sizeOp() const
                            });
 }
 
-std::vector<TransactionFrameBasePtr>
+std::pair<std::vector<TransactionFrameBasePtr>, std::vector<TransactionFrameBasePtr>>
 TxSimTxSetFrame::sortForApply()
 {
     std::vector<TransactionFrameBasePtr> res;
@@ -112,7 +112,7 @@ TxSimTxSetFrame::sortForApply()
     }
 
     assert(resultIter == mResults.end());
-    return res;
+    return {std::vector<TransactionFrameBasePtr>(), res};
 }
 
 void

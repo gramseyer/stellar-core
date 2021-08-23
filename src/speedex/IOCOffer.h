@@ -9,6 +9,8 @@
 
 namespace stellar {
 
+class AbstractLedgerTxn;
+
 struct IOCOffer {
 	int64 mSellAmount;
 	Price mMinPrice;
@@ -21,6 +23,8 @@ struct IOCOffer {
 
 	// should not be changed by feeBumpTx;
 	static Hash offerHash(Price price, AccountID sourceAccount, uint64_t sourceSeqNum, uint32_t opIdNum);
+
+	void unwindOffer(AbstractLedgerTxn& ltx, const Asset& sellAsset) const;
 
 };
 

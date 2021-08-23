@@ -421,10 +421,10 @@ class TxSetFrameStrictOrderForTesting : public TxSetFrame
     TxSetFrameStrictOrderForTesting(Hash const& previousLedgerHash)
         : TxSetFrame(previousLedgerHash){};
 
-    std::vector<TransactionFrameBasePtr>
+    std::pair<std::vector<TransactionFrameBasePtr>, std::vector<TransactionFrameBasePtr>>
     sortForApply() override
     {
-        return mTransactions;
+        return {{}, mTransactions};
     };
 
     void sortForHash() override{};

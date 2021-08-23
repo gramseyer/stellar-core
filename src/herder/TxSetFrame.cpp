@@ -106,21 +106,20 @@ SeqSorter(TransactionFrameBasePtr const& tx1,
     * transactions for an account are sorted by sequence number (ascending)
     * the order between accounts is randomized
 */
-std::vector<TransactionFrameBasePtr>
+std::pair<TxSetFrame::TransactionPtrVec, TxSetFrame::TransactionPtrVec>
 TxSetFrame::sortForApply()
 {
     ZoneScoped;
     auto txQueues = buildAccountTxQueues();
 
 
-    vector<TransactionFrameBasePtr> retList;
-    retList.reserve(mTransactions.size());
+    TransactionPtrVec commutativeTxs;
 
     for (auto& [_, queue] : txQueues) {
         while (!queue.empty()) {
             auto front = queue.front();
             if (front->isCommutativeTransaction()) {
-                retList.push_back(front);
+                commutativeTxs.push_back(front);
                 queue.pop_front();
             } else {
                 break;
@@ -159,6 +158,8 @@ TxSetFrame::sortForApply()
         }
     }
 
+    TransactionPtrVec retList;
+    retList.reserve(mTransactions.size() - commutativeTxs.size());
 
     for (auto& batch : txBatches)
     {
@@ -172,7 +173,7 @@ TxSetFrame::sortForApply()
         }
     }
 
-    return retList;
+    return std::make_pair(commutativeTxs, retList);
 }
 
 struct SurgeCompare

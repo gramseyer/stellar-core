@@ -7,6 +7,12 @@
 #include "xdr/Stellar-transaction.h"
 #include "crypto/SHA.h"
 
+#include "ledger/LedgerTxn.h"
+
+#include "ledger/TrustLineWrapper.h"
+
+#include "transactions/TransactionUtils.h"
+
 namespace stellar {
 
 IOCOffer::IOCOffer(int64_t sellAmount, Price minPrice, Hash totalOrderingHash, AccountID sourceAccount)
@@ -49,6 +55,30 @@ IOCOffer::offerHash(Price price, AccountID sourceAccount, uint64_t sourceSeqNum,
 	return hasher.finish();
 }
 
+void IOCOffer::unwindOffer(AbstractLedgerTxn& ltx, const Asset& sellAsset) const {
+	auto header = ltx.loadHeader();
+	auto account = loadAccount(ltx, mSourceAccount);
+
+
+	if (sellAsset.type() == ASSET_TYPE_NATIVE) {
+
+		if (!addBalance(header, account, mSellAmount)) {
+			throw std::runtime_error("couldn't refund ioc trade");
+		}
+	} else {
+		auto sourceLine = loadTrustLine(ltx, mSourceAccount, sellAsset);
+
+    	if (!sourceLine)
+        {
+            throw std::runtime_error("couldn't refund ioc bc no trustline");
+        }
+
+        if (!sourceLine.addBalance(header, mSellAmount))
+        {
+            throw std::runtime_error("couldn't refund ioc trustline balance");
+        }
+    }
+}
 
 
 } /* stellar */

@@ -3,20 +3,24 @@
 #include "speedex/IOCOffer.h"
 #include "ledger/LedgerTxn.h"
 
+#include "transactions/TransactionUtils.h"
+
+#include "ledger/TrustLineWrapper.h"
+
 namespace stellar {
 
 OrderbookClearingTarget::OrderbookClearingTarget(
-	AssetPair tradingPair, uint64_t sellPrice, uint64_t buyPrice, uint128_t totalClearingTarget)
+	AssetPair tradingPair, uint64_t sellPrice, uint64_t buyPrice, int128_t totalClearingTarget)
 	: mTradingPair(tradingPair)
 	, mSellPrice(sellPrice)
 	, mBuyPrice(buyPrice)
-	, mTotalClearingTarget(totalClearingTarget) {}
+	, mTotalClearTarget(totalClearingTarget) {}
 
 // n/d <= sell/buy  ==> n * buy <= d * sell
 bool
 OrderbookClearingTarget::checkPrice(const IOCOffer& offer) {
-	int128_t lhs = ((int128_t)offer.minPrice.n) * buyPrice;
-	int128_t rhs = ((int128_t)offer.minPrice.d) * sellPrice;
+	int128_t lhs = ((int128_t)offer.mMinPrice.n) * mBuyPrice;
+	int128_t rhs = ((int128_t)offer.mMinPrice.d) * mSellPrice;
 	return lhs <= rhs;
 }
 
@@ -38,8 +42,7 @@ OrderbookClearingTarget::clearOffer(AbstractLedgerTxn& ltx, const IOCOffer& offe
 		throw std::logic_error("tried to clear offer with bad price!");
 	}
 
-	int128_t priorSellRealization = ((int128_t)mRealizedSellAmount) * ((int128_t)mSellPrice);
-	int128_t curSellRealization = std::min(mTotalSellRealization - priorSellRealization, ((int128_t)offer.amount) * ((int128_t)sellPrice));
+	int128_t curSellRealization = std::min(mTotalClearTarget - mRealizedClearTarget, ((int128_t)offer.mSellAmount) * ((int128_t)mSellPrice));
 
 	mRealizedClearTarget += curSellRealization;
 
@@ -56,12 +59,13 @@ OrderbookClearingTarget::clearOffer(AbstractLedgerTxn& ltx, const IOCOffer& offe
 			throw std::runtime_error("arithmetic error");
 		}
 		if (asset.type() == ASSET_TYPE_NATIVE) {
-			auto ok = stellar::addBalance(header, sourceAccount, amount);
+			auto account = loadAccount(ltx, offer.mSourceAccount);
+			auto ok = addBalance(header, account, amount);
 			if (!ok) {
-				throw std::runtime_error("commutative precondition fail when clearing offer")
+				throw std::runtime_error("commutative precondition fail when clearing offer");
 			}
 		} else {
-	        auto sourceLine = loadTrustLine(ltx, getSourceID(), asset);
+	        auto sourceLine = loadTrustLine(ltx, offer.mSourceAccount, asset);
 
 	        if (!sourceLine) {
 	        	throw std::runtime_error("commutative precondition fail when clearing offer");
@@ -84,12 +88,13 @@ OrderbookClearingTarget::clearOffer(AbstractLedgerTxn& ltx, const IOCOffer& offe
 void
 OrderbookClearingTarget::finishWithLiquidityPool(AbstractLedgerTxn& ltx, LiquidityPoolFrame& lpFrame) {
 	int128_t remainingToClear = mTotalClearTarget - mRealizedClearTarget;
-	lpFrame.assertValidClearingAmount(remainingToClear, mSellPrice, mBuyPrice);
 
 	int64_t sellAmount = getSellAmount(remainingToClear);
 	int64_t buyAmount = getBuyAmount(remainingToClear);
 
-	lpFrame.doTransfer(ltx, sellAmount, buyAmount);
+	lpFrame.assertValidSellAmount(sellAmount, mSellPrice, mBuyPrice);
+
+	lpFrame.doTransfer(sellAmount, buyAmount, mSellPrice, mBuyPrice);
 
 	mRealizedSellAmount += sellAmount;
 	mRealizedBuyAmount += buyAmount;
@@ -104,7 +109,7 @@ OrderbookClearingTarget::doneClearing() const {
 
 AssetPair 
 OrderbookClearingTarget::getAssetPair() const {
-	return mAssetPair;
+	return mTradingPair;
 }
 
 

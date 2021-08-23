@@ -1,4 +1,4 @@
-#include "simplex/Solver.h"
+#include "simplex/solver.h"
 
 namespace stellar {
 
@@ -28,11 +28,11 @@ TradeMaximizingSolver::TradeMaximizingSolver(std::vector<Asset> assets) {
 		idx++;
 	}
 	mNumAssets = idx;
-	auto numVars = numVars();
+	auto nVars = numVars();
 	size_t numRows = mNumAssets + 1; // last one is objective
 	mCoefficients.resize(numRows);
 	for (auto& row : mCoefficients) {
-		row.first.resize(numVars);
+		row.first.resize(nVars);
 	}
 
 	for (size_t i = 0; i < mNumAssets; i++) {
@@ -58,7 +58,7 @@ TradeMaximizingSolver::setUpperBound(AssetPair assetPair, int128_t upperBound) {
 	auto yIdx = assetPairToVarIndex(assetPair);
 	auto eIdx = yIdx + (mNumAssets -1) * (mNumAssets - 1);
 
-	if (mAssetPairRowMap.find(assetPair) != mAssetPairRowMap.end()) {
+	if (mAssetPairToRowMap.find(assetPair) != mAssetPairToRowMap.end()) {
 		throw std::runtime_error("can't double-set upper bound");
 	}
 
@@ -99,7 +99,7 @@ TradeMaximizingSolver::getNextPivotConstraint(size_t pivotColumn) const {
 	int128_t minValue = 0;
 	for (size_t i = 1; i < mCoefficients.size(); i++) {
 		if (mCoefficients[i].first[pivotColumn] > 0) {
-			if (!foundValue || minValue < mCoefficents[i].second) {
+			if (!foundValue || minValue < mCoefficients[i].second) {
 				foundValue = true;
 				minIdx = i;
 				minValue = mCoefficients[i].second;

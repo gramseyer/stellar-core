@@ -35,7 +35,7 @@ class AbstractTxSetFrameForApply
 
     virtual size_t sizeOp() const = 0;
 
-    virtual std::vector<TransactionFrameBasePtr> sortForApply() = 0;
+    virtual std::pair<std::vector<TransactionFrameBasePtr>, std::vector<TransactionFrameBasePtr>> sortForApply() = 0;
     virtual void toXDR(TransactionSet& set) = 0;
 };
 
@@ -50,6 +50,7 @@ class TxSetFrame : public AbstractTxSetFrameForApply
     Hash mPreviousLedgerHash;
 
     using AccountTransactionQueue = std::deque<TransactionFrameBasePtr>;
+    using TransactionPtrVec = std::vector<TransactionFrameBasePtr>;
 
     bool checkOrTrim(Application& app,
                      std::vector<TransactionFrameBasePtr>& trimmed,
@@ -79,7 +80,7 @@ class TxSetFrame : public AbstractTxSetFrameForApply
 
     virtual void sortForHash();
 
-    std::vector<TransactionFrameBasePtr> sortForApply() override;
+    std::pair<TransactionPtrVec, TransactionPtrVec> sortForApply() override;
 
     bool checkValid(Application& app, uint64_t lowerBoundCloseTimeOffset,
                     uint64_t upperBoundCloseTimeOffset);

@@ -1,13 +1,15 @@
 #pragma once
 
+#include "ledger/AssetPair.h"
+#include <cstdint>
+
 namespace stellar {
 
-class AbtractLedgerTxn;
-class IOCOffer;
+class AbstractLedgerTxn;
+struct IOCOffer;
 class LiquidityPoolFrame;
 
 class OrderbookClearingTarget {
-	using uint128_t = unsigned __int128_t;
 	using int128_t = __int128_t;
 
 	const AssetPair mTradingPair;
@@ -24,10 +26,9 @@ class OrderbookClearingTarget {
 
 	//bool offerWouldClearFully(const IOCOffer& offer) const;
 
-	bool doneClearing() const;
 
-	int64_t getSellAmount(int128_t amountTimesPrice, uint64_t sellPrice) const;
-	int64_t getBuyAmount(int128_t amountTimesPrice, uint64_t buyPrice) const;
+	int64_t getSellAmount(int128_t amountTimesPrice) const;
+	int64_t getBuyAmount(int128_t amountTimesPrice) const;
 
 public:
 
@@ -38,11 +39,15 @@ public:
 		return mRealizedBuyAmount;
 	}
 
-	OrderbookClearingTarget(AssetPair tradingPair, uint64_t sellPrice, uint64_t buyPrice, uint128_t totalClearingTarget);
+	OrderbookClearingTarget(AssetPair tradingPair, uint64_t sellPrice, uint64_t buyPrice, int128_t totalClearingTarget);
 
 	void clearOffer(AbstractLedgerTxn& ltx, const IOCOffer& offer);
 
 	AssetPair getAssetPair() const;
+
+	bool doneClearing() const;
+
+	void finishWithLiquidityPool(AbstractLedgerTxn& ltx, LiquidityPoolFrame& lpFrame);
 
 
 	//void clearOffers(IOCOrderbook& offers, LiquidityPoolFrame& lp);

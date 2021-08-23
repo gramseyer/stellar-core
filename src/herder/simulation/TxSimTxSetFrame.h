@@ -36,7 +36,7 @@ class TxSimTxSetFrame : public AbstractTxSetFrameForApply
 
     size_t sizeOp() const override;
 
-    std::vector<TransactionFrameBasePtr> sortForApply() override;
+    std::pair<std::vector<TransactionFrameBasePtr>, std::vector<TransactionFrameBasePtr>> sortForApply() override;
     void toXDR(TransactionSet& set) override;
 };
 }

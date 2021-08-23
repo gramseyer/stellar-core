@@ -1,5 +1,7 @@
 #include "speedex/BatchSolution.h"
 
+#include "speedex/OrderbookClearingTarget.h"
+
 namespace stellar {
 
 
@@ -11,11 +13,11 @@ BatchSolution::BatchSolution() {
 std::vector<OrderbookClearingTarget>
 BatchSolution::produceClearingTargets() const {
 
-	std::vector<OrderbookClearingTargets> out;
+	std::vector<OrderbookClearingTarget> out;
 
-	for (auto& [tradingPair, amount] : mTradingAmountsTimesPrices) {
-		uint64_t sellPrice = mAssetPrices[tradingPair.selling];
-		uitn64_t buyPrice = mAssetPrices[tradingPair.buying];
+	for (auto& [tradingPair, amount] : mTradeAmountsTimesPrices) {
+		uint64_t sellPrice = mAssetPrices.at(tradingPair.selling);
+		uint64_t buyPrice = mAssetPrices.at(tradingPair.buying);
 
 		out.emplace_back(tradingPair, sellPrice, buyPrice, amount);
 	}

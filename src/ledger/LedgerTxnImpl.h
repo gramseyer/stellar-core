@@ -567,8 +567,8 @@ class LedgerTxn::Impl
 
     void addSpeedexIOCOffer(AssetPair assetPair, const IOCOffer& offer);
 
-    IOCOrderbookManager const& 
-    getSpeedexIOCOffers() const;
+    IOCOrderbookManager& 
+    getSpeedexIOCOffers();
 
     std::shared_ptr<const LedgerEntry>
     loadSnapshotEntry(LedgerKey const& key) const;

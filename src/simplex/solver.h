@@ -1,7 +1,10 @@
 #pragma once
 
 #include "util/UnorderedMap.h"
+#include "util/XDROperators.h"
 #include "ledger/AssetPair.h"
+
+#include "ledger/LedgerHashUtils.h"
 
 #include <cstdint>
 #include <vector>
@@ -19,7 +22,7 @@ class TradeMaximizingSolver {
 	std::vector<Row> mCoefficients;
 
 	UnorderedMap<Asset, size_t> mIndexMap;
-	UnorderedMap<AssetPair, size_t, AssetPairHasher> mAssetPairToRowMap;
+	UnorderedMap<AssetPair, size_t, AssetPairHash> mAssetPairToRowMap;
 	size_t indexPairToVarIndex(size_t sell, size_t buy) const;
 	size_t assetPairToVarIndex(AssetPair assetPair) const;
 

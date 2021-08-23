@@ -637,16 +637,20 @@ LedgerManagerImpl::closeLedger(LedgerCloseData const& ledgerData)
     // the transaction set that was agreed upon by consensus
     // was sorted by hash; we reorder it so that transactions are
     // sorted such that sequence numbers are respected
-    vector<TransactionFrameBasePtr> txs = ledgerData.getTxSet()->sortForApply();
+    auto [commutativeTxs, noncommutativeTxs] = ledgerData.getTxSet()->sortForApply();
 
     // first, prefetch source accounts for txset, then charge fees
-    prefetchTxSourceIds(txs);
-    processFeesSeqNums(txs, ltx, txSet->getBaseFee(header.current()),
+    prefetchTxSourceIds(commutativeTxs);
+    prefetchTxSourceIds(noncommutativeTxs);
+    processFeesSeqNums(commutativeTxs, ltx, txSet->getBaseFee(header.current()),
+                       ledgerCloseMeta);
+    processFeesSeqNums(noncommutativeTxs, ltx, txSet->getBaseFee(header.current()),
                        ledgerCloseMeta);
 
     TransactionResultSet txResultSet;
-    txResultSet.results.reserve(txs.size());
-    applyTransactions(txs, ltx, txResultSet, ledgerCloseMeta);
+    auto txs_size = commutativeTxs.size() + noncommutativeTxs.size();
+    txResultSet.results.reserve(txs_size);
+    applyTransactions(commutativeTxs, noncommutativeTxs, ltx, txResultSet, ledgerCloseMeta);
 
     ltx.loadHeader().current().txSetResultHash = xdrSha256(txResultSet);
 
@@ -1064,8 +1068,63 @@ LedgerManagerImpl::prefetchTransactionData(
 }
 
 void
+LedgerManagerImpl::applyTransaction(
+    TransactionFrameBasePtr& tx,
+    AbstractLedgerTxn& ltx,
+    TransactionResultSet& txResultSet,
+    std::unique_ptr<LedgerCloseMeta> const& ledgerCloseMeta,
+    int& index)
+{
+    ZoneNamedN(txZone, "applyTransaction", true);
+    auto txTime = mTransactionApply.TimeScope();
+    TransactionMeta tm(2);
+    CLOG_DEBUG(Tx, " tx#{} = {} ops={} txseq={} (@ {})", index,
+               hexAbbrev(tx->getContentsHash()), tx->getNumOperations(),
+               tx->getSeqNum(),
+               mApp.getConfig().toShortString(tx->getSourceID()));
+    tx->apply(mApp, ltx, tm);
+
+    TransactionResultPair results;
+    results.transactionHash = tx->getContentsHash();
+    results.result = tx->getResult();
+
+    // First gather the TransactionResultPair into the TxResultSet for
+    // hashing into the ledger header.
+    txResultSet.results.emplace_back(results);
+
+    // Then potentially add that TRP and its associated TransactionMeta
+    // into the associated slot of any LedgerCloseMeta we're collecting.
+    if (ledgerCloseMeta)
+    {
+        TransactionResultMeta& trm =
+            ledgerCloseMeta->v0().txProcessing.at(index);
+        trm.txApplyProcessing = tm;
+        trm.result = results;
+    }
+
+    // Then finally store the results and meta into the txhistory table.
+    // if we're running in a mode that has one.
+    //
+    // Note to future: when we eliminate the txhistory and txfeehistory
+    // tables, the following step can be removed.
+    //
+    // Also note: for historical reasons the history tables number
+    // txs counting from 1, not 0. We preserve this for the time being
+    // in case anyone depends on it.
+    ++index;
+    if (mApp.getConfig().MODE_STORES_HISTORY_MISC)
+    {
+        auto ledgerSeq = ltx.loadHeader().current().ledgerSeq;
+        storeTransaction(mApp.getDatabase(), ledgerSeq, tx, tm,
+                         txResultSet);
+    }
+}
+
+void
 LedgerManagerImpl::applyTransactions(
-    std::vector<TransactionFrameBasePtr>& txs, AbstractLedgerTxn& ltx,
+    std::vector<TransactionFrameBasePtr>& commutativeTxs,
+    std::vector<TransactionFrameBasePtr>& noncommutativeTxs, 
+    AbstractLedgerTxn& ltx,
     TransactionResultSet& txResultSet,
     std::unique_ptr<LedgerCloseMeta> const& ledgerCloseMeta)
 {
@@ -1073,14 +1132,18 @@ LedgerManagerImpl::applyTransactions(
     int index = 0;
 
     // Record counts
-    auto numTxs = txs.size();
+    auto numTxs = commutativeTxs.size() + noncommutativeTxs.size();
     size_t numOps = 0;
     if (numTxs > 0)
     {
         mTransactionCount.Update(static_cast<int64_t>(numTxs));
         TracyPlot("ledger.transaction.count", static_cast<int64_t>(numTxs));
         numOps =
-            std::accumulate(txs.begin(), txs.end(), size_t(0),
+            std::accumulate(noncommutativeTxs.begin(), noncommutativeTxs.end(), size_t(0),
+                            [](size_t s, TransactionFrameBasePtr const& v) {
+                                return s + v->getNumOperations();
+                            })
+            + std::accumulate(commutativeTxs.begin(), commutativeTxs.end(), size_t(0),
                             [](size_t s, TransactionFrameBasePtr const& v) {
                                 return s + v->getNumOperations();
                             });
@@ -1090,53 +1153,24 @@ LedgerManagerImpl::applyTransactions(
                   ltx.loadHeader().current().ledgerSeq, numTxs, numOps);
     }
 
-    prefetchTransactionData(txs);
+    prefetchTransactionData(commutativeTxs);
 
-    for (auto tx : txs)
+    for (auto tx : commutativeTxs) {
+        applyTransaction(tx, ltx, txResultSet, ledgerCloseMeta, index);
+    }
+
+    auto& speedexOrderbooks = ltx.getSpeedexIOCOffers();
+    speedexOrderbooks.sealBatch();
+
+    BatchSolution solution; // TODO price computation
+
+    speedexOrderbooks.clearBatch(ltx, solution);
+
+    prefetchTransactionData(noncommutativeTxs);
+
+    for (auto tx : noncommutativeTxs)
     {
-        ZoneNamedN(txZone, "applyTransaction", true);
-        auto txTime = mTransactionApply.TimeScope();
-        TransactionMeta tm(2);
-        CLOG_DEBUG(Tx, " tx#{} = {} ops={} txseq={} (@ {})", index,
-                   hexAbbrev(tx->getContentsHash()), tx->getNumOperations(),
-                   tx->getSeqNum(),
-                   mApp.getConfig().toShortString(tx->getSourceID()));
-        tx->apply(mApp, ltx, tm);
-
-        TransactionResultPair results;
-        results.transactionHash = tx->getContentsHash();
-        results.result = tx->getResult();
-
-        // First gather the TransactionResultPair into the TxResultSet for
-        // hashing into the ledger header.
-        txResultSet.results.emplace_back(results);
-
-        // Then potentially add that TRP and its associated TransactionMeta
-        // into the associated slot of any LedgerCloseMeta we're collecting.
-        if (ledgerCloseMeta)
-        {
-            TransactionResultMeta& trm =
-                ledgerCloseMeta->v0().txProcessing.at(index);
-            trm.txApplyProcessing = tm;
-            trm.result = results;
-        }
-
-        // Then finally store the results and meta into the txhistory table.
-        // if we're running in a mode that has one.
-        //
-        // Note to future: when we eliminate the txhistory and txfeehistory
-        // tables, the following step can be removed.
-        //
-        // Also note: for historical reasons the history tables number
-        // txs counting from 1, not 0. We preserve this for the time being
-        // in case anyone depends on it.
-        ++index;
-        if (mApp.getConfig().MODE_STORES_HISTORY_MISC)
-        {
-            auto ledgerSeq = ltx.loadHeader().current().ledgerSeq;
-            storeTransaction(mApp.getDatabase(), ledgerSeq, tx, tm,
-                             txResultSet);
-        }
+        applyTransaction(tx, ltx, txResultSet, ledgerCloseMeta, index);
     }
 
     logTxApplyMetrics(ltx, numTxs, numOps);

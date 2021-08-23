@@ -62,7 +62,7 @@ LedgerKey poolShareTrustLineKey(AccountID const& accountID,
                                 PoolID const& poolID);
 InternalLedgerKey sponsorshipKey(AccountID const& sponsoredID);
 InternalLedgerKey sponsorshipCounterKey(AccountID const& sponsoringID);
-InternalLedgerKey speedexIOCBatchKey();
+//InternalLedgerKey speedexIOCBatchKey();
 
 uint32_t const FIRST_PROTOCOL_SUPPORTING_OPERATION_LIMITS = 11;
 uint32_t const ACCOUNT_SUBENTRY_LIMIT = 1000;
@@ -239,6 +239,8 @@ bool hasTrustLineEntryExtV2(TrustLineEntry const& tl);
 Asset getAsset(AccountID const& issuer, AssetCode const& assetCode);
 Asset getNativeAsset();
 
+AccountID getIssuer(Asset const& asset);
+
 bool claimableBalanceFlagIsValid(ClaimableBalanceEntry const& cb);
 void removeOffersByAccountAndAsset(AbstractLedgerTxn& ltx,
                                    AccountID const& account,
@@ -256,5 +258,8 @@ ChangeTrustAsset assetToChangeTrustAsset(Asset const& asset);
 
 int64_t getPoolWithdrawalAmount(int64_t amountPoolShares,
                                 int64_t totalPoolShares, int64_t reserve);
+
+PoolID getPoolID(Asset const& selling, Asset const& buying);
+
 
 }

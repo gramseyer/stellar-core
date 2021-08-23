@@ -598,8 +598,8 @@ class AbstractLedgerTxn : public AbstractLedgerTxnParent
     loadOffersByAccountAndAsset(AccountID const& accountID,
                                 Asset const& asset) = 0;
 
-    virtual IOCOrderbookManager const&
-    getSpeedexIOCOffers() const = 0;
+    virtual IOCOrderbookManager &
+    getSpeedexIOCOffers() = 0;
 
     virtual void addSpeedexIOCOffer(AssetPair assetPair, const IOCOffer& offer) = 0;
     // Loads every pool share trust line owned by the specified account that
@@ -695,8 +695,8 @@ class LedgerTxn : public AbstractLedgerTxn
 
     LedgerTxnEntry load(InternalLedgerKey const& key) override;
 
-    IOCOrderbookManager const&
-    getSpeedexIOCOffers() const override;
+    IOCOrderbookManager&
+    getSpeedexIOCOffers() override;
 
     void addSpeedexIOCOffer(AssetPair assetPair, const IOCOffer& offer) override;
 

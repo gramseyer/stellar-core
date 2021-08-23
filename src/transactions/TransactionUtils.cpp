@@ -240,12 +240,12 @@ sponsorshipCounterKey(AccountID const& sponsoringID)
     return gkey;
 }
 
-InternalLedgerKey
-speedexIOCBatchKey()
-{
-    InternalLedgerKey gkey(InternalLedgerEntryType::SPEEDEX_IOC_BATCH);
-    return gkey;
-}
+//InternalLedgerKey
+//speedexIOCBatchKey()
+//{
+  //  InternalLedgerKey gkey(InternalLedgerEntryType::SPEEDEX_IOC_BATCH);
+  //  return gkey;
+//}
 
 LedgerTxnEntry
 loadAccount(AbstractLedgerTxn& ltx, AccountID const& accountID)
@@ -1291,6 +1291,17 @@ Asset getNativeAsset() {
     return asset;
 }
 
+AccountID getIssuer(Asset const& asset) {
+    if (asset.type() == ASSET_TYPE_CREDIT_ALPHANUM4) {
+        return asset.alphaNum4().issuer;
+    }
+    if (asset.type() == ASSET_TYPE_CREDIT_ALPHANUM12) {
+        return asset.alphaNum12().issuer;
+    }
+    throw std::runtime_error("unexpected asset type");
+}
+
+
 bool
 claimableBalanceFlagIsValid(ClaimableBalanceEntry const& cb)
 {
@@ -1473,4 +1484,21 @@ makeClaimAtom(uint32_t ledgerVersion, AccountID const& accountID,
     }
     return atom;
 }
+
+
+PoolID getPoolID(Asset const& selling, Asset const& buying) {
+    LiquidityPoolParameters params;
+    params.type(LIQUIDITY_POOL_CONSTANT_PRODUCT);
+    if (selling < buying) {
+        params.constantProduct().assetA = selling;
+        params.constantProduct().assetB = buying;
+    } else {
+        params.constantProduct().assetA = buying;
+        params.constantProduct().assetB = selling;
+    }
+    params.constantProduct().fee = LIQUIDITY_POOL_FEE_V18;
+
+    return xdrSha256(params);
+}
+
 } // namespace stellar
