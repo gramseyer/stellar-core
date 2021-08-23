@@ -53,7 +53,7 @@ public:
 
 	void clearOffers(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target, LiquidityPoolFrame& lpFrame);
 
-	void finish();
+	void finish(AbstractLedgerTxn& ltx);
 };
 
 

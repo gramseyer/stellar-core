@@ -88,7 +88,6 @@ void
 IOCOrderbookManager::clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& solution) {
 	throwIfNotSealed();
 
-	//Must have one orderbook target per each IOCOrderbook.
 	auto orderbookTargets = solution.produceClearingTargets();
 
 	for (auto& target : orderbookTargets) {
@@ -97,7 +96,7 @@ IOCOrderbookManager::clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& sol
 	UnorderedMap<Asset, int64_t> roundingErrors;
 
 	for (auto& [_, orderbook] : mOrderbooks) {
-		orderbook.finish();
+		orderbook.finish(ltx);
 	}
 	for (auto& target : orderbookTargets) {
 		auto assetPair = target.getAssetPair();

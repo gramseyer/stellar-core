@@ -76,8 +76,16 @@ IOCOrderbook::clearOffers(AbstractLedgerTxn& ltx, OrderbookClearingTarget& targe
 }
 
 void
-IOCOrderbook::finish() {
-	throwIfNotCleared();
+IOCOrderbook::finish(AbstractLedgerTxn& ltx) {
+
+	if (!mCleared) {
+
+		for (auto const& offer : mOffers) {
+			offer.unwindOffer(ltx, mTradingPair.selling);
+		}
+
+		mCleared = true;
+	}
 }
 
 
