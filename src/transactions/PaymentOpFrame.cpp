@@ -134,7 +134,7 @@ PaymentOpFrame::doCheckValid(uint32_t ledgerVersion)
 
 bool
 PaymentOpFrame::doAddCommutativityRequirements(AbstractLedgerTxn& ltx,
-                                               AccountCommutativityRequirements& reqs)
+                                               TransactionCommutativityRequirements& reqs)
 {
     if (!reqs.checkTrustLine(ltx, toAccountID(mPayment.destination), mPayment.asset))
     {
@@ -142,11 +142,18 @@ PaymentOpFrame::doAddCommutativityRequirements(AbstractLedgerTxn& ltx,
         return false;
     }
 
-    if (!reqs.tryAddAssetRequirement(ltx, mPayment.asset, mPayment.amount))
-    {
-        innerResult().code(PAYMENT_UNDERFUNDED);
+    if (!reqs.checkTrustLine(ltx, getSourceID(), mPayment.asset)) {
+        innerResult().code(PAYMENT_MALFORMED);
         return false;
     }
+
+    reqs.addAssetRequirement(getSourceID(), mPayment.asset, mPayment.amount);
+
+   // if (!reqs.tryAddAssetRequirement(ltx, getSourceID(), mPayment.asset, mPayment.amount))
+   // {
+   //     innerResult().code(PAYMENT_UNDERFUNDED);
+   //     return false;
+   // }
     return true;
 }
 

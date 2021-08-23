@@ -182,10 +182,10 @@ TransactionFrame::getFeeBid() const
     }
 }
 
-std::optional<AccountCommutativityRequirements>
+std::optional<TransactionCommutativityRequirements>
 TransactionFrame::getCommutativityRequirements(AbstractLedgerTxn& ltx) const
 {
-    AccountCommutativityRequirements reqs(getSourceID());
+    TransactionCommutativityRequirements reqs;
     for (const auto& op : getOperations()) {
         if (!op->addCommutativityRequirements(ltx, reqs)) {
             return std::nullopt;

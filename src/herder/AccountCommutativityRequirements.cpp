@@ -1,4 +1,6 @@
 #include "herder/AccountCommutativityRequirements.h"
+#include "transactions/TransactionUtils.h"
+#include "ledger/TrustLineWrapper.h"
 
 namespace stellar
 {
@@ -82,10 +84,10 @@ AccountCommutativityRequirements::checkAvailableBalanceSufficesForNewRequirement
 	return false;
 }
 
-int64_t 
-AccountCommutativityRequirements::getNativeAssetReqs() {
-	return mRequiredAssets[getNativeAsset()];
-}
+//int64_t 
+//AccountCommutativityRequirements::getNativeAssetReqs() {
+//	return mRequiredAssets[getNativeAsset()];
+//}
 
 void
 AccountCommutativityRequirements::cleanZeroedEntries()

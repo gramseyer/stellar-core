@@ -3,6 +3,8 @@
 #include "speedex/SpeedexConfigEntryFrame.h"
 
 #include "ledger/LedgerTxn.h"
+#include "ledger/TrustLineWrapper.h"
+#include "transactions/TransactionUtils.h"
 
 namespace stellar {
 
@@ -79,7 +81,7 @@ CreateSpeedexIOCOfferOpFrame::doApply(AbstractLedgerTxn& ltx)
 
 	ltx.addSpeedexIOCOffer(tradingPair, offer);
 
-	auto sourceAccount = stellar::loadAccount(ltx, getSourceID());
+	auto sourceAccount = loadAccount(ltx, getSourceID());
 
 	if (!sourceAccount) {
 		throw std::runtime_error("commutative preconditions check should have blocked op from nonexistent account");
@@ -89,7 +91,7 @@ CreateSpeedexIOCOfferOpFrame::doApply(AbstractLedgerTxn& ltx)
 
 	auto sellAsset = mCreateSpeedexIOCOffer.sellAsset;
 	if (sellAsset.type() == ASSET_TYPE_NATIVE) {
-		auto ok = stellar::addBalance(header, sourceAccount, -amount);
+		auto ok = addBalance(header, sourceAccount, -amount);
 		if (!ok) {
 			throw std::runtime_error("commutative preconditions check should have blocked op with insufficent balance");
 		}
@@ -115,7 +117,7 @@ CreateSpeedexIOCOfferOpFrame::doCheckValid(uint32_t ledgerVersion)
 }
 
 bool 
-CreateSpeedexIOCOfferOpFrame::doAddCommutativityRequirements(AbstractLedgerTxn& ltx, AccountCommutativityRequirements& reqs) {
+CreateSpeedexIOCOfferOpFrame::doAddCommutativityRequirements(AbstractLedgerTxn& ltx, TransactionCommutativityRequirements& reqs) {
 
 	if (!checkValidAssetPair(ltx)) {
 		return false;
@@ -126,11 +128,7 @@ CreateSpeedexIOCOfferOpFrame::doAddCommutativityRequirements(AbstractLedgerTxn& 
 		return false;
 	}
 
-    if (!reqs.tryAddAssetRequirement(ltx, mCreateSpeedexIOCOffer.sellAsset, mCreateSpeedexIOCOffer.sellAmount))
-    {
-    	innerResult().code(CREATE_SPEEDEX_IOC_OFFER_INSUFFICIENT_BALANCE);
-        return false;
-    }
+	reqs.addAssetRequirement(getSourceID(), mCreateSpeedexIOCOffer.sellAsset, mCreateSpeedexIOCOffer.sellAmount);
     return true;
 }
 

@@ -11,6 +11,7 @@ namespace stellar
 class AbstractLedgerTxn;
 class Application;
 class SignatureChecker;
+class TransactionCommutativityRequirements;
 
 class FeeBumpTransactionFrame : public TransactionFrameBase
 {
@@ -87,7 +88,7 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
     bool isCommutativeTransaction() const override;
     bool commutativityWellFormednessChecks() const override;
 
-    std::optional<AccountCommutativityRequirements>
+    std::optional<TransactionCommutativityRequirements>
     getCommutativityRequirements(AbstractLedgerTxn& ltx) const override;
 
     void

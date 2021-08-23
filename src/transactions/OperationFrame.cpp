@@ -148,14 +148,14 @@ OperationFrame::apply(SignatureChecker& signatureChecker,
 
 bool
 OperationFrame::doAddCommutativityRequirements(AbstractLedgerTxn& ltx,
-                                               AccountCommutativityRequirements& reqs)
+                                               TransactionCommutativityRequirements& reqs)
 {
     return false;
 }
 
 bool
 OperationFrame::addCommutativityRequirements(AbstractLedgerTxn& ltx,
-                                             AccountCommutativityRequirements& reqs) {
+                                             TransactionCommutativityRequirements& reqs) {
     ZoneScoped;
     //TODO logging
     return doAddCommutativityRequirements(ltx, reqs);

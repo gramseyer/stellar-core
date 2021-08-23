@@ -7,7 +7,7 @@
 #include "ledger/LedgerHashUtils.h"
 #include "overlay/StellarXDR.h"
 #include "util/UnorderedSet.h"
-#include "herder/AccountCommutativityRequirements.h"
+#include "herder/TransactionCommutativityRequirements.h"
 
 namespace stellar
 {
@@ -56,7 +56,7 @@ class TransactionFrameBase
     virtual bool isCommutativeTransaction() const = 0;
     virtual bool commutativityWellFormednessChecks() const = 0;
 
-    virtual std::optional<AccountCommutativityRequirements>
+    virtual std::optional<TransactionCommutativityRequirements>
     getCommutativityRequirements(AbstractLedgerTxn& ltx) const = 0;
 
     virtual void

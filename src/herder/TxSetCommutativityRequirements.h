@@ -1,12 +1,13 @@
 #pragma once
 
-#include "herder/AccountCommutativityRequirements.h"
-
 #include "transactions/TransactionFrameBase.h"
 
 #include "ledger/LedgerHashUtils.h"
 
 #include <map>
+#include "util/UnorderedMap.h"
+#include "herder/AccountCommutativityRequirements.h"
+#include "util/XDROperators.h"
 
 
 namespace stellar {

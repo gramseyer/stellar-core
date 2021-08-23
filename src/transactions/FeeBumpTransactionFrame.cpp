@@ -18,6 +18,8 @@
 #include "util/GlobalChecks.h"
 #include "xdrpp/marshal.h"
 
+#include "herder/TransactionCommutativityRequirements.h"
+
 #include <numeric>
 
 namespace stellar
@@ -363,7 +365,7 @@ FeeBumpTransactionFrame::commutativityWellFormednessChecks() const
     return mInnerTx -> commutativityWellFormednessChecks();
 }
 
-std::optional<AccountCommutativityRequirements>
+std::optional<TransactionCommutativityRequirements>
 FeeBumpTransactionFrame::getCommutativityRequirements(AbstractLedgerTxn& ltx) const
 {
     //TODO get results from within feeBump tx

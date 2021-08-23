@@ -1,8 +1,14 @@
-#include "TxSetCommutativityRequirements.h"
+#include "herder/TxSetCommutativityRequirements.h"
 
 #include "ledger/LedgerTxnHeader.h"
 #include "ledger/LedgerTxn.h"
 #include "util/XDROperators.h"
+
+#include "ledger/LedgerHashUtils.h"
+
+
+#include "transactions/TransactionUtils.h"
+
 
 namespace stellar {
 
@@ -19,7 +25,7 @@ TxSetCommutativityRequirements::canAddFee(LedgerTxnHeader& header, AbstractLedge
 {
 
 	//Possibly redundant check
-	auto accountEntry = stellar::loadAccount(ltx, feeAccount);
+	auto accountEntry = loadAccount(ltx, feeAccount);
 	if (!accountEntry)
 	{
 		return false;
@@ -58,25 +64,29 @@ TxSetCommutativityRequirements::tryAddTransaction(TransactionFrameBasePtr tx, Ab
 		return false;
 	}
 
-	auto sourceAccount = tx->getSourceID();
+	for (auto const& [acct, acctReqs] : reqs->getRequirements()) {
+		auto prevAcctReqs = getRequirements(acct);
 
-	auto& prevReqs = getRequirements(sourceAccount);
-
-
-	for (auto& req : reqs->getRequiredAssets()) {
-		if (!prevReqs.checkAvailableBalanceSufficesForNewRequirement(header, ltx, req.first, req.second))
-		{
-			return false;
+		for (auto& req : acctReqs.getRequiredAssets()) {
+			if (!prevAcctReqs.checkAvailableBalanceSufficesForNewRequirement(header, ltx, req.first, req.second))
+			{
+				return false;
+			}
 		}
 	}
+
 
 	if (!canAddFee(header, ltx, tx->getFeeSourceID(), tx->getFeeBid())) {
 		return false;
 	}
 
-	for (auto& req : reqs->getRequiredAssets())
-	{
-		prevReqs.addAssetRequirement(req.first, req.second);
+
+	for (auto const& [acct, acctReqs] : reqs -> getRequirements()) {
+		auto prevAcctReqs = getRequirements(acct);
+
+		for (auto& req : acctReqs.getRequiredAssets()) {
+			prevAcctReqs.addAssetRequirement(req.first, req.second);
+		}
 	}
 
 	addFee(tx->getFeeSourceID(), tx->getFeeBid());
@@ -112,24 +122,29 @@ TxSetCommutativityRequirements::tryReplaceTransaction(TransactionFrameBasePtr ne
 		throw std::logic_error("replacement by fee should require an increase");
 	}
 
-	auto prevReqs = getRequirements(sourceAccount);
-
 	LedgerTxnHeader header = ltx.loadHeader();
 
 	if (newReqs)
 	{
 		if (oldReqs)
 		{
-			for (auto& oldReq : oldReqs -> getRequiredAssets())
+			for (auto const& [acct, oldAcctReqs] : oldReqs -> getRequirements())
 			{
-				newReqs->addAssetRequirement(oldReq.first, -oldReq.second);
+				for (auto const& [asset, amount] : oldAcctReqs.getRequiredAssets())
+				{
+					newReqs->addAssetRequirement(acct, asset, -amount);
+				}
 			}
 		}
-		for (auto& newReq : newReqs -> getRequiredAssets())
+		for (auto const& [acct, newAcctReqs] : newReqs -> getRequirements())
 		{
-			if (!prevReqs.checkAvailableBalanceSufficesForNewRequirement(header, ltx, newReq.first, newReq.second)) {
-				return false;
+			auto& prevAcctReqs = getRequirements(acct);
+			for (auto const& [asset, amount] : newAcctReqs.getRequiredAssets()) {
+				if (!prevAcctReqs.checkAvailableBalanceSufficesForNewRequirement(header, ltx, asset, amount)) {
+					return false;
+				}
 			}
+
 		}
 	}
 
@@ -140,9 +155,12 @@ TxSetCommutativityRequirements::tryReplaceTransaction(TransactionFrameBasePtr ne
 
 	if (newReqs)
 	{
-		for (auto& req : newReqs -> getRequiredAssets())
+		for (auto const& [acct, newAcctReq] : newReqs->getRequirements())
 		{
-			prevReqs.addAssetRequirement(req.first, req.second);
+			auto& prevReqs = getRequirements(acct);
+			for (auto const& [asset, amount] : newAcctReq.getRequiredAssets()) {
+				prevReqs.addAssetRequirement(asset, amount);
+			}
 		}
 	}
 	addFee(newTx->getFeeSourceID(), newFeeBid);

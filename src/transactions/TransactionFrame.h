@@ -5,7 +5,7 @@
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "ledger/InternalLedgerEntry.h"
-#include "herder/AccountCommutativityRequirements.h"
+#include "herder/TransactionCommutativityRequirements.h"
 #include "overlay/StellarXDR.h"
 #include "transactions/TransactionFrameBase.h"
 #include "util/GlobalChecks.h"
@@ -175,7 +175,7 @@ class TransactionFrame : public TransactionFrameBase
     bool isCommutativeTransaction() const override;
     bool commutativityWellFormednessChecks() const override;
 
-    std::optional<AccountCommutativityRequirements>
+    std::optional<TransactionCommutativityRequirements>
     getCommutativityRequirements(AbstractLedgerTxn& ltx) const override;
 
     int64_t getMinFee(LedgerHeader const& header) const override;

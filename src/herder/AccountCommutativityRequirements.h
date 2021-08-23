@@ -1,8 +1,6 @@
 #pragma once
 
-#include "ledger/TrustLineWrapper.h"
 #include "util/UnorderedMap.h"
-#include "transactions/TransactionUtils.h"
 #include "xdr/Stellar-types.h"
 #include "xdr/Stellar-transaction.h"
 #include "xdr/Stellar-ledger-entries.h"
@@ -39,7 +37,7 @@ public:
 	//implicitly checks trustline
 	bool tryAddAssetRequirement(AbstractLedgerTxn& ltx, Asset asset, int64_t amount);
 
-	int64_t getNativeAssetReqs();
+	//int64_t getNativeAssetReqs();
 
 	void addAssetRequirement(Asset asset, int64_t amount);
 
