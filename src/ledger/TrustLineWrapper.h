@@ -51,6 +51,7 @@ class TrustLineWrapper
     bool isAuthorizedToMaintainLiabilities() const;
     bool isClawbackEnabled() const;
 
+    // Just checks trustline settings, not asset settings
     bool isCommutativeTxEnabledTrustLine() const;
 
     int64_t getAvailableBalance(LedgerTxnHeader const& header) const;

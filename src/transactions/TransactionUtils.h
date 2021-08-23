@@ -7,6 +7,7 @@
 #include "xdr/Stellar-ledger-entries.h"
 #include "xdr/Stellar-transaction.h"
 #include <algorithm>
+#include <optional>
 
 namespace stellar
 {
@@ -189,7 +190,11 @@ bool isAuthorizedToMaintainLiabilities(LedgerTxnEntry const& entry);
 bool isAuthorizedToMaintainLiabilities(ConstLedgerTxnEntry const& entry);
 
 bool isCommutativeTxEnabledAsset(uint32_t flags);
+// checks the asset issued by the account in entry
 bool isCommutativeTxEnabledAsset(LedgerEntry const& entry);
+
+bool isCommutativeTxEnabledAsset(AbstractLedgerTxn& ltx, Asset const& asset);
+bool isCommutativeTxEnabledAsset(AbstractLedgerTxn& ltx, TrustLineAsset const& tlAsset);
 
 bool isCommutativeTxEnabledTrustLine(LedgerEntry const& le);
 bool isCommutativeTxEnabledTrustLine(LedgerTxnEntry const& entry);
@@ -255,6 +260,9 @@ TrustLineAsset assetToTrustLineAsset(Asset const& asset);
 TrustLineAsset
 changeTrustAssetToTrustLineAsset(ChangeTrustAsset const& ctAsset);
 ChangeTrustAsset assetToChangeTrustAsset(Asset const& asset);
+
+std::optional<Asset>
+trustLineAssetToAsset(TrustLineAsset const& tlAsset);
 
 int64_t getPoolWithdrawalAmount(int64_t amountPoolShares,
                                 int64_t totalPoolShares, int64_t reserve);

@@ -147,13 +147,13 @@ PaymentOpFrame::doAddCommutativityRequirements(AbstractLedgerTxn& ltx,
         return false;
     }
 
+    if (!stellar::isCommutativeTxEnabledAsset(ltx, mPayment.asset)) {
+        innerResult().code(PAYMENT_MALFORMED);
+        return false;
+    }
+
     reqs.addAssetRequirement(getSourceID(), mPayment.asset, mPayment.amount);
 
-   // if (!reqs.tryAddAssetRequirement(ltx, getSourceID(), mPayment.asset, mPayment.amount))
-   // {
-   //     innerResult().code(PAYMENT_UNDERFUNDED);
-   //     return false;
-   // }
     return true;
 }
 

@@ -27,23 +27,10 @@ TransactionCommutativityRequirements::checkTrustLine(AbstractLedgerTxn& ltx, Acc
 	return tl.isCommutativeTxEnabledTrustLine();
 }
 
-//implicitly checks trustline
-//bool 
-//TransactionCommutativityRequirements::tryAddAssetRequirement(AbstractLedgerTxn& ltx, AccountID account, Asset asset, int64_t amount) {
-//	return getOrCreateAccountReqs(account).tryAddAssetRequirement(ltx, asset, amount);
-//}
-
 void 
 TransactionCommutativityRequirements::addAssetRequirement(AccountID account, Asset asset, int64_t amount) {
 	getOrCreateAccountReqs(account).addAssetRequirement(asset, amount);
 }
-/*
-bool 
-TransactionCommutativityRequirements::checkAvailableBalanceSufficesForNewRequirement(
-	LedgerTxnHeader& header, AbstractLedgerTxn& ltx, AccountID account, Asset asset, int64_t amount)
-{
-	return getOrCreateAccountReqs(account).checkAvailableBalanceSufficesForNewRequirement
-} */
 
 TransactionCommutativityRequirements::AccountMap const& 
 TransactionCommutativityRequirements::getRequirements() const {

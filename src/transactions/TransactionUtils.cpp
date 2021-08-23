@@ -987,6 +987,24 @@ isCommutativeTxEnabledAsset(LedgerEntry const& entry)
     return isCommutativeTxEnabledAsset(entry.data.account().flags);
 }
 
+bool isCommutativeTxEnabledAsset(AbstractLedgerTxn& ltx, Asset const& asset) {
+    auto issuerID = getIssuer(asset);
+    auto acct = loadAccount(ltx, issuerID);
+    if (!acct) return false;
+    return isCommutativeTxEnabledAsset(acct.current());
+}
+
+bool isCommutativeTxEnabledAsset(AbstractLedgerTxn& ltx, TrustLineAsset const& tlAsset) {
+    auto asset = trustLineAssetToAsset(tlAsset);
+    // returns nullopt when asset is a pool share.
+    // TODO to make pool shares tradable on speedex, edit this (and also change
+    // speedexconfig to allow pool share assets, not just regular Asset types)
+    if (!asset) {
+        return false;
+    }
+    return isCommutativeTxEnabledAsset(ltx, *asset);
+}
+
 bool
 isCommutativeTxEnabledTrustLine(LedgerEntry const& le)
 {
@@ -1405,6 +1423,30 @@ changeTrustAssetToTrustLineAsset(ChangeTrustAsset const& ctAsset)
     }
 
     return tlAsset;
+}
+
+std::optional<Asset>
+trustLineAssetToAsset(TrustLineAsset const& tlAsset) {
+    Asset asset;
+    switch(tlAsset.type()) {
+        case stellar::ASSET_TYPE_NATIVE:
+            asset.type(tlAsset.type());
+            break;
+        case stellar::ASSET_TYPE_CREDIT_ALPHANUM4:
+            asset.type(tlAsset.type());
+            asset.alphaNum4() = tlAsset.alphaNum4();
+            break;
+        case stellar::ASSET_TYPE_CREDIT_ALPHANUM12:
+            asset.type(tlAsset.type());    
+            asset.alphaNum12() = tlAsset.alphaNum12();
+            break;
+        case stellar::ASSET_TYPE_POOL_SHARE:
+            return std::nullopt;
+            break;
+        default:
+            throw std::runtime_error("unknown asset type");
+    }
+    return asset;
 }
 
 int64_t

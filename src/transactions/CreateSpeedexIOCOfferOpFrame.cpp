@@ -49,6 +49,16 @@ CreateSpeedexIOCOfferOpFrame::checkValidAssetPair(AbstractLedgerTxn& ltx) {
 		innerResult().code(CREATE_SPEEDEX_IOC_OFFER_INVALID_TRADING_PAIR);
 		return false;
 	}
+
+	if (!stellar::isCommutativeTxEnabledAsset(ltx, tradingPair.selling)) {
+		innerResult().code(CREATE_SPEEDEX_IOC_OFFER_MALFORMED);
+		return false;
+	}
+	
+	if (!stellar::isCommutativeTxEnabledAsset(ltx, tradingPair.buying)) {
+		innerResult().code(CREATE_SPEEDEX_IOC_OFFER_MALFORMED);
+		return false;
+	}
 	return true;
 }
 
@@ -124,6 +134,11 @@ CreateSpeedexIOCOfferOpFrame::doAddCommutativityRequirements(AbstractLedgerTxn& 
 	}
 
 	if (!reqs.checkTrustLine(ltx, getSourceID(), mCreateSpeedexIOCOffer.buyAsset)) {
+		innerResult().code(CREATE_SPEEDEX_IOC_OFFER_MALFORMED);
+		return false;
+	}
+
+	if (!reqs.checkTrustLine(ltx, getSourceID(), mCreateSpeedexIOCOffer.sellAsset)) {
 		innerResult().code(CREATE_SPEEDEX_IOC_OFFER_MALFORMED);
 		return false;
 	}
