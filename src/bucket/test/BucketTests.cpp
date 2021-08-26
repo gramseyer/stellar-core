@@ -26,7 +26,6 @@
 #include "util/Logging.h"
 #include "util/Math.h"
 #include "util/Timer.h"
-#include "xdrpp/autocheck.h"
 
 using namespace stellar;
 
@@ -121,14 +120,13 @@ TEST_CASE("file backed buckets", "[bucket][bucketbench]")
     for_versions_with_differing_bucket_logic(cfg, [&](Config const& cfg) {
         Application::pointer app = createTestApplication(clock, cfg);
 
-        autocheck::generator<LedgerKey> deadGen;
         CLOG_DEBUG(Bucket, "Generating 10000 random ledger entries");
         std::vector<LedgerEntry> live(9000);
         std::vector<LedgerKey> dead(1000);
         for (auto& e : live)
             e = LedgerTestUtils::generateValidLedgerEntry(3);
         for (auto& e : dead)
-            e = deadGen(3);
+            e = LedgerTestUtils::generateValidLedgerKeyNoSpeedex(3);
         CLOG_DEBUG(Bucket, "Hashing entries");
         std::shared_ptr<Bucket> b1 = Bucket::fresh(
             app->getBucketManager(), getAppLedgerVersion(app), {}, live, dead,
@@ -142,7 +140,7 @@ TEST_CASE("file backed buckets", "[bucket][bucketbench]")
             for (auto& e : live)
                 e = LedgerTestUtils::generateValidLedgerEntry(3);
             for (auto& e : dead)
-                e = deadGen(3);
+                e = LedgerTestUtils::generateValidLedgerKeyNoSpeedex(3);
             {
                 b1 = Bucket::merge(
                     app->getBucketManager(),

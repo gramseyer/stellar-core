@@ -48,6 +48,8 @@ LedgerEntryKey(LedgerEntry const& e)
     case LIQUIDITY_POOL:
         k.liquidityPool().liquidityPoolID = d.liquidityPool().liquidityPoolID;
         break;
+    case SPEEDEX_CONFIG:
+        break;
 
     default:
         abort();
@@ -328,6 +330,7 @@ operator>(Price const& a, Price const& b)
 bool
 operator==(Price const& a, Price const& b)
 {
+    //isn't this a bug?  You can have two prices that return (a >= b) = true, (a>b)= false, (a==b) = false
     return (a.n == b.n) && (a.d == b.d);
 }
 }

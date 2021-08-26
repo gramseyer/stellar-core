@@ -511,8 +511,29 @@ throwIf(LiquidityPoolWithdrawResult const& result)
 }
 
 void
+throwIf(CreateSpeedexIOCOfferResult const& result)
+{
+    switch(result.code()) 
+    {
+    case CREATE_SPEEDEX_IOC_OFFER_SUCCESS:
+        break;
+    case CREATE_SPEEDEX_IOC_OFFER_NO_SPEEDEX_CONFIG:
+        throw ex_CREATE_SPEEDEX_IOC_OFFER_NO_SPEEDEX_CONFIG{};
+    case CREATE_SPEEDEX_IOC_OFFER_INVALID_TRADING_PAIR:
+        throw ex_CREATE_SPEEDEX_IOC_OFFER_INVALID_TRADING_PAIR{};
+    case CREATE_SPEEDEX_IOC_OFFER_INSUFFICIENT_BALANCE:
+        throw ex_CREATE_SPEEDEX_IOC_OFFER_INSUFFICIENT_BALANCE{};
+    case CREATE_SPEEDEX_IOC_OFFER_MALFORMED:
+        throw ex_CREATE_SPEEDEX_IOC_OFFER_MALFORMED{};
+    default:
+        throw ex_UNKNOWN{};
+    }
+}
+
+void
 throwIf(TransactionResult const& result)
 {
+
     switch (result.result.code())
     {
     case txSUCCESS:
@@ -549,6 +570,7 @@ throwIf(TransactionResult const& result)
     default:
         throw ex_UNKNOWN{};
     };
+
 
     switch (opResult.tr().type())
     {
@@ -620,6 +642,9 @@ throwIf(TransactionResult const& result)
         break;
     case LIQUIDITY_POOL_WITHDRAW:
         throwIf(opResult.tr().liquidityPoolWithdrawResult());
+        break;
+    case CREATE_SPEEDEX_IOC_OFFER:
+        throwIf(opResult.tr().createSpeedexIOCOfferResult());
         break;
     }
 }

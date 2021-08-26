@@ -137,9 +137,14 @@ const MAX_SIGNERS = 20;
 
 typedef AccountID* SponsorshipDescriptor;
 
+struct IssuedAssetLog {
+    AssetCode code;
+    int64 issuedAmount;
+};
+
 struct AccountEntryExtensionV3
 {
-    int64 *totalAssetIssued;
+    IssuedAssetLog issuedAmounts<>; // sort by asset
 
     union switch(int v)
     {

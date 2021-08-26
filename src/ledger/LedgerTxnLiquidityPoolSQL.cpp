@@ -389,8 +389,7 @@ void
 LedgerTxnRoot::Impl::dropLiquidityPools()
 {
     throwIfChild();
-    mEntryCache.clear();
-    mBestOffers.clear();
+    clearAllCaches();
 
     std::string coll = mDatabase.getSimpleCollationClause();
 

@@ -37,6 +37,7 @@ class TrustLineWrapper::NonIssuerImpl : public TrustLineWrapper::AbstractImpl
     bool isAuthorizedToMaintainLiabilities() const override;
     bool isClawbackEnabled() const override;
     bool isCommutativeTxEnabledTrustLine() const override;
+    //bool issuerExists(AbstractLedgerTxn& ltx) const override;
 
     int64_t getAvailableBalance(LedgerTxnHeader const& header) const override;
 
@@ -70,6 +71,7 @@ class TrustLineWrapper::IssuerImpl : public TrustLineWrapper::AbstractImpl
     bool isAuthorizedToMaintainLiabilities() const override;
     bool isClawbackEnabled() const override;
     bool isCommutativeTxEnabledTrustLine() const override;
+   // bool issuerExists(AbstractLedgerTxn& ltx) const override;
 
     int64_t getAvailableBalance(LedgerTxnHeader const& header) const override;
 
@@ -106,9 +108,7 @@ TrustLineWrapper::TrustLineWrapper(AbstractLedgerTxn& ltx,
         LedgerKey key(ACCOUNT);
         key.account().accountID = accountID;
         auto entry = ltx.load(key);
-        if (entry) {
-            mImpl = std::make_unique<IssuerImpl>(accountID, asset, std::move(entry));
-        }
+        mImpl = std::make_unique<IssuerImpl>(accountID, asset, std::move(entry));
     }
 }
 
@@ -187,6 +187,11 @@ bool
 TrustLineWrapper::isCommutativeTxEnabledTrustLine() const {
     return getImpl()->isCommutativeTxEnabledTrustLine();
 }
+
+//bool
+//TrustLineWrapper::issuerExists(AbstractLedgerTxn& ltx) const {
+//    return getImpl()->issuerExists(ltx);
+//}
 
 
 int64_t
@@ -291,6 +296,22 @@ bool
 TrustLineWrapper::NonIssuerImpl::isCommutativeTxEnabledTrustLine() const {
     return stellar::isCommutativeTxEnabledTrustLine(mEntry);
 }
+/*
+bool
+TrustLineWrapper::NonIssuerImpl::issuerExists(AbstractLedgerTxn& ltx) const {
+    auto asset = mEntry.current().data.trustLine().asset;
+
+    if (asset.type() == ASSET_TYPE_NATIVE) {
+        return false;
+    }
+    if (asset.type() == ASSET_TYPE_POOL_SHARE) {
+        return false;
+    }
+    auto issuer = getIssuer(asset);
+    auto issuerAccount = stellar::loadAccount(ltx, issuer);
+    return ((bool) issuerAccount);
+}
+*/
 
 int64_t
 TrustLineWrapper::NonIssuerImpl::getAvailableBalance(
@@ -322,15 +343,22 @@ TrustLineWrapper::IssuerImpl::operator bool() const
 int64_t
 TrustLineWrapper::IssuerImpl::getBalance() const
 {
-    return stellar::getRemainingAssetIssuance(mEntry);
+    if (!mEntry) {
+        // issuer account deleted
+        return INT64_MAX;
+    }
+    return stellar::getRemainingAssetIssuance(mEntry, stellar::getAssetCode(mAsset));
 }
 
 bool
 TrustLineWrapper::IssuerImpl::addBalance(LedgerTxnHeader const& header,
                                          int64_t delta)
 {
-
-    return stellar::issueAsset(mEntry, delta);
+    if (!mEntry) {
+        // issuer account deleted
+        return INT64_MAX;
+    }
+    return stellar::issueAsset(mEntry, stellar::getAssetCode(mAsset), delta);
 }
 
 int64_t
@@ -351,14 +379,20 @@ int64_t
 TrustLineWrapper::IssuerImpl::addBuyingLiabilities(
     LedgerTxnHeader const& header, int64_t delta)
 {
-    return true;
+    if (!mEntry) {
+        return true;
+    }
+    return stellar::issueAsset(mEntry, stellar::getAssetCode(mAsset), delta);
 }
 
 int64_t
 TrustLineWrapper::IssuerImpl::addSellingLiabilities(
     LedgerTxnHeader const& header, int64_t delta)
 {
-    return true;
+    if (!mEntry) {
+        return true;
+    }
+    return stellar::issueAsset(mEntry, stellar::getAssetCode(mAsset), delta);
 }
 
 bool
@@ -381,6 +415,7 @@ TrustLineWrapper::IssuerImpl::isClawbackEnabled() const
 
 bool
 TrustLineWrapper::IssuerImpl::isCommutativeTxEnabledTrustLine() const {
+    // issuer trustline always has limit INT64_MAX and is authorized
     return true;
 }
 
@@ -388,13 +423,25 @@ int64_t
 TrustLineWrapper::IssuerImpl::getAvailableBalance(
     LedgerTxnHeader const& header) const
 {
-    return INT64_MAX;
+    if (!mEntry) {
+        return INT64_MAX;
+
+    }
+    return stellar::getRemainingAssetIssuance(mEntry, stellar::getAssetCode(mAsset));
 }
 
 int64_t
 TrustLineWrapper::IssuerImpl::getMaxAmountReceive(
     LedgerTxnHeader const& header) const
 {
+    if (!mEntry) {
+        return INT64_MAX;
+    }
+
+    auto issuedAmount = stellar::getIssuedAssetAmount(mEntry, stellar::getAssetCode(mAsset));
+    if (issuedAmount) {
+        return *issuedAmount;
+    }
     return INT64_MAX;
 }
 

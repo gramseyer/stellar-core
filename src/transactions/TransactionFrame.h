@@ -10,6 +10,7 @@
 #include "transactions/TransactionFrameBase.h"
 #include "util/GlobalChecks.h"
 #include "util/types.h"
+#include "util/UnorderedSet.h"
 
 
 #include <optional>
@@ -177,6 +178,9 @@ class TransactionFrame : public TransactionFrameBase
 
     std::optional<TransactionCommutativityRequirements>
     getCommutativityRequirements(AbstractLedgerTxn& ltx) const override;
+
+    UnorderedSet<AccountID>
+    getRelevantAccounts() const override; 
 
     int64_t getMinFee(LedgerHeader const& header) const override;
 

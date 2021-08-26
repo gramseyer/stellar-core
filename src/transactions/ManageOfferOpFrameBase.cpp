@@ -44,7 +44,6 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter)
 
     if (mSheep.type() != ASSET_TYPE_NATIVE)
     {
-        auto sheepLineA = loadTrustLine(ltx, getSourceID(), mSheep);
         if (ledgerVersion < 13)
         {
             auto issuer = stellar::loadAccount(ltx, getIssuer(mSheep));
@@ -54,6 +53,7 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter)
                 return false;
             }
         }
+        auto sheepLineA = loadTrustLine(ltx, getSourceID(), mSheep);
         if (!sheepLineA)
         { // we don't have what we are trying to sell
             setResultSellNoTrust();
@@ -74,7 +74,6 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter)
 
     if (mWheat.type() != ASSET_TYPE_NATIVE)
     {
-        auto wheatLineA = loadTrustLine(ltx, getSourceID(), mWheat);
 
         if (ledgerVersion < 13)
         {
@@ -85,6 +84,9 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter)
                 return false;
             }
         }
+
+        auto wheatLineA = loadTrustLine(ltx, getSourceID(), mWheat);
+
         if (!wheatLineA)
         { // we can't hold what we are trying to buy
             setResultBuyNoTrust();
@@ -109,13 +111,14 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
     LedgerTxn ltx(ltxOuter); // ltx will always be rolled back
 
     auto header = ltx.loadHeader();
-    auto sourceAccount = loadSourceAccount(ltx, header);
+  // auto sourceAccount = loadSourceAccount(ltx, header);
 
     auto ledgerVersion = header.current().ledgerVersion;
     if (ledgerVersion < 14 && creatingNewOffer &&
         (ledgerVersion >= 10 ||
          (mSheep.type() == ASSET_TYPE_NATIVE && ledgerVersion > 8)))
     {
+        auto sourceAccount = loadSourceAccount(ltx, header);
         // we need to compute maxAmountOfSheepCanSell based on the
         // updated reserve to avoid selling too many and falling
         // below the reserve when we try to create the offer later on
@@ -140,13 +143,26 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
         createEntryWithoutSponsorship(le, sourceAccount.current());
     }
 
-    auto sheepLineA = loadTrustLineIfNotNative(ltx, getSourceID(), mSheep);
-    auto wheatLineA = loadTrustLineIfNotNative(ltx, getSourceID(), mWheat);
+    //auto sheepLineA = loadTrustLineIfNotNative(ltx, getSourceID(), mSheep);
+    //auto wheatLineA = loadTrustLineIfNotNative(ltx, getSourceID(), mWheat);
 
-    maxWheatReceive = canBuyAtMost(header, sourceAccount, mWheat, wheatLineA);
-    maxSheepSend = canSellAtMost(header, sourceAccount, mSheep, sheepLineA);
+    auto sourceLoader = [&] () -> LedgerTxnEntry {
+        return loadSourceAccount(ltx, header);
+    };
+
+    auto trustLineLoader = [&] (Asset const& asset) {
+        return loadTrustLineIfNotNative(ltx, getSourceID(), asset);
+    };
+
+    //maxWheatReceive = canBuyAtMost(header, sourceAccount, mWheat, wheatLineA);
+    maxWheatReceive = canBuyAtMost(header, mWheat, sourceLoader, trustLineLoader);
+    //maxSheepSend = canSellAtMost(header, sourceAccount, mSheep, sheepLineA);
+    maxSheepSend = canSellAtMost(header, mSheep, sourceLoader, trustLineLoader);
+
     if (ledgerVersion >= 10)
     {
+        // no need to worry about loadSourceAccount's buggy pre-8 caching here
+
         // Note that maxWheatReceive = max(0, availableLimit). But why do we
         // work with availableLimit?
         // - If availableLimit >= 0 then maxWheatReceive = availableLimit so
@@ -162,10 +178,21 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
         //   is negative.
         // In practice, I _think_ that negative available limit is not possible
         // unless there is a logic error.
-        int64_t availableLimit =
-            (mWheat.type() == ASSET_TYPE_NATIVE)
-                ? getMaxAmountReceive(header, sourceAccount)
-                : wheatLineA.getMaxAmountReceive(header);
+        
+        //int64_t availableLimit =
+        //    (mWheat.type() == ASSET_TYPE_NATIVE)
+        //        ? getMaxAmountReceive(header, sourceAccount)
+        //        : wheatLineA.getMaxAmountReceive(header);
+        
+        int64_t availableLimit = 0;
+        if (mWheat.type() == ASSET_TYPE_NATIVE)
+        {
+            availableLimit = getMaxAmountReceive(header, loadAccount(ltx, getSourceID()));
+        } else {
+            auto wheatLineA = loadTrustLineIfNotNative(ltx, getSourceID(), mWheat);
+            availableLimit = wheatLineA.getMaxAmountReceive(header);
+        }
+
         if (availableLimit < getOfferBuyingLiabilities())
         {
             setResultLineFull();
@@ -187,10 +214,21 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
         //   balance is negative.
         // In practice, negative available balance is possible for native assets
         // after the reserve has been raised.
-        int64_t availableBalance =
-            (mSheep.type() == ASSET_TYPE_NATIVE)
-                ? getAvailableBalance(header, sourceAccount)
-                : sheepLineA.getAvailableBalance(header);
+        
+        //int64_t availableBalance =
+        //    (mSheep.type() == ASSET_TYPE_NATIVE)
+        //        ? getAvailableBalance(header, sourceAccount)
+        //        : sheepLineA.getAvailableBalance(header);
+        
+        int64_t availableBalance = 0;
+        if (mSheep.type() == ASSET_TYPE_NATIVE)
+        {
+            availableBalance = getAvailableBalance(header, loadAccount(ltx, getSourceID()));
+        } else {
+            auto sheepLineA = loadTrustLineIfNotNative(ltx, getSourceID(), mSheep);
+            availableBalance = sheepLineA.getAvailableBalance(header);
+        }
+
         if (availableBalance < getOfferSellingLiabilities())
         {
             setResultUnderfunded();
@@ -433,17 +471,25 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter)
         {
             if (sheepStays)
             {
-                auto sourceAccount =
-                    stellar::loadAccountWithoutRecord(ltx, getSourceID());
-                auto sheepLineA = loadTrustLineWithoutRecordIfNotNative(
-                    ltx, getSourceID(), mSheep);
-                auto wheatLineA = loadTrustLineWithoutRecordIfNotNative(
-                    ltx, getSourceID(), mWheat);
+                //auto sourceAccount =
+                //    stellar::loadAccountWithoutRecord(ltx, getSourceID());
+                auto sourceLoader = [&] () -> ConstLedgerTxnEntry {
+                    return stellar::loadAccountWithoutRecord(ltx, getSourceID());
+                };
+                auto trustLineLoader = [&] (Asset const& asset) {
+                    return stellar::loadTrustLineWithoutRecordIfNotNative(ltx, getSourceID(), asset);
+                };
+                //auto sheepLineA = loadTrustLineWithoutRecordIfNotNative(
+                //    ltx, getSourceID(), mSheep);
+                //auto wheatLineA = loadTrustLineWithoutRecordIfNotNative(
+                //    ltx, getSourceID(), mWheat);
 
+
+                //TODO fix trustlines here
                 int64_t sheepSendLimit =
-                    canSellAtMost(header, sourceAccount, mSheep, sheepLineA);
+                    canSellAtMost(header, mSheep, sourceLoader, trustLineLoader);
                 int64_t wheatReceiveLimit =
-                    canBuyAtMost(header, sourceAccount, mWheat, wheatLineA);
+                    canBuyAtMost(header, mWheat, sourceLoader, trustLineLoader);
                 applyOperationSpecificLimits(sheepSendLimit, sheepSent,
                                              wheatReceiveLimit, wheatReceived);
                 amount = adjustOffer(mPrice, sheepSendLimit, wheatReceiveLimit);

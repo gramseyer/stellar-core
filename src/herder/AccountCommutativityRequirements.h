@@ -32,7 +32,7 @@ public:
 
 	AccountCommutativityRequirements(AccountID source) : mSourceAccount(source) {}
 
-	bool checkTrustLine(AbstractLedgerTxn& ltx, AccountID account, Asset asset) const;
+	bool checkTrustLine(AbstractLedgerTxn& ltx, Asset asset) const;
 
 	//implicitly checks trustline
 	bool tryAddAssetRequirement(AbstractLedgerTxn& ltx, Asset asset, int64_t amount);
@@ -53,6 +53,9 @@ public:
 	{
 		return mRequiredAssets.empty();
 	}
+
+	bool checkAccountHasSufficientBalance(AbstractLedgerTxn& ltx, LedgerTxnHeader& header);
+
 };
 
 

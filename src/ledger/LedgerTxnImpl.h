@@ -768,6 +768,8 @@ class LedgerTxnRoot::Impl
     bool const mBestOfferDebuggingEnabled;
 #endif
 
+    void clearAllCaches() const;
+
     void throwIfChild() const;
 
     std::shared_ptr<LedgerEntry const> loadAccount(LedgerKey const& key) const;
@@ -918,6 +920,7 @@ class LedgerTxnRoot::Impl
     void dropTrustLines();
     void dropClaimableBalances();
     void dropLiquidityPools();
+    void dropSpeedexConfigs();
 
     std::shared_ptr<const LedgerEntry>
     loadSnapshotEntry(LedgerKey const& key) const;

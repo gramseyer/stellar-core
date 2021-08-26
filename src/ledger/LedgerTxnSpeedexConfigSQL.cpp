@@ -159,5 +159,13 @@ LedgerTxnRoot::Impl::bulkUpsertSpeedexConfig(
     mDatabase.doDatabaseTypeSpecificOperation(op);
 }
 
+void
+LedgerTxnRoot::Impl::dropSpeedexConfigs()
+{
+    throwIfChild();
+    //TODO do something, right now no-op
+    //no op
+    clearAllCaches();
+}
 
 } /* namespace stellar */

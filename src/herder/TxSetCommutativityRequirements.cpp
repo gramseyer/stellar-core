@@ -25,10 +25,12 @@ TxSetCommutativityRequirements::canAddFee(LedgerTxnHeader& header, AbstractLedge
 {
 
 	//Possibly redundant check
-	auto accountEntry = loadAccount(ltx, feeAccount);
-	if (!accountEntry)
 	{
-		return false;
+		auto accountEntry = loadAccount(ltx, feeAccount);
+		if (!accountEntry)
+		{
+			return false;
+		}
 	}
 
 	auto& reqs = getRequirements(feeAccount);
@@ -89,6 +91,29 @@ TxSetCommutativityRequirements::tryAddTransaction(TransactionFrameBasePtr tx, Ab
 		}
 	}
 
+	addFee(tx->getFeeSourceID(), tx->getFeeBid());
+
+	return true;
+}
+
+bool
+TxSetCommutativityRequirements::validateAndAddTransaction(TransactionFrameBasePtr tx, AbstractLedgerTxn& ltx) {
+	AccountID sourceAccount = tx->getSourceID();
+
+	auto reqs = tx->getCommutativityRequirements(ltx);
+
+	if (tx -> isCommutativeTransaction() && (!reqs)) {
+		return false;
+	}
+
+	if (tx -> isCommutativeTransaction()) {
+		for (auto const& [acct, acctReqs] : reqs -> getRequirements()) {
+			auto prevAcctReqs = getRequirements(acct);
+			for (auto const& req : acctReqs.getRequiredAssets()) {
+				prevAcctReqs.addAssetRequirement(req.first, req.second);
+			}
+		}
+	}
 	addFee(tx->getFeeSourceID(), tx->getFeeBid());
 
 	return true;
@@ -191,6 +216,9 @@ TxSetCommutativityRequirements::tryCleanAccountEntry(AccountID account)
 
 }
 
+bool 
+TxSetCommutativityRequirements::checkAccountHasSufficientBalance(AccountID account, AbstractLedgerTxn& ltx, LedgerTxnHeader& header) {
+	return getRequirements(account).checkAccountHasSufficientBalance(ltx, header);
+}
 
-
-} /* ns stellar */
+} /* stellar */

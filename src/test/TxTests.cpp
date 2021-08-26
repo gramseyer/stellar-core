@@ -584,6 +584,29 @@ transactionFromOperations(Application& app, SecretKey const& from,
     return transactionFromOperationsV1(app, from, seq, ops, fee);
 }
 
+TransactionFramePtr commutativeTxFromOperations(Application& app,
+                                                SecretKey const& from,
+                                                SequenceNumber seq,
+                                                std::vector<Operation> const& ops,
+                                                int fee)
+{
+    TransactionEnvelope e(ENVELOPE_TYPE_TX_COMMUTATIVE);
+    e.commutativeTx().tx.sourceAccount = toMuxedAccount(from.getPublicKey());
+    e.commutativeTx().tx.fee = 
+        fee != 0 ? fee
+                 : static_cast<uint32_t>(
+                        (ops.size() * app.getLedgerManager().getLastTxFee())
+                            & UINT32_MAX);
+    e.commutativeTx().tx.seqNum = seq;
+    std::copy(std::begin(ops), std::end(ops),
+              std::back_inserter(e.v1().tx.operations));
+
+    auto res = std::static_pointer_cast<TransactionFrame>(
+        TransactionFrameBase::makeTransactionFromWire(app.getNetworkID(), e));
+    res->addSignature(from);
+    return res;
+}
+
 Operation
 changeTrust(Asset const& asset, int64_t limit)
 {

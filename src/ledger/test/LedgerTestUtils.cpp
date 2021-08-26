@@ -13,6 +13,7 @@
 #include <string>
 #include <xdrpp/autocheck.h>
 #include <xdrpp/xdrpp/marshal.h>
+//#include <autocheck/generator_combinators.hpp>
 
 namespace stellar
 {
@@ -104,6 +105,8 @@ randomlyModifyEntry(LedgerEntry& e)
         e.data.liquidityPool().body.constantProduct().poolSharesTrustLineCount =
             autocheck::generator<int64>{}();
         makeValid(e.data.liquidityPool());
+        break;
+    case SPEEDEX_CONFIG:
         break;
     }
 }
@@ -275,6 +278,12 @@ makeValid(LiquidityPoolEntry& lp)
 }
 
 void
+makeValid(SpeedexConfigEntry& sce)
+{
+    //TODO configure stuff
+}
+
+void
 makeValid(std::vector<LedgerHeaderHistoryEntry>& lhv,
           LedgerHeaderHistoryEntry firstLedger,
           HistoryManager::LedgerVerificationStatus state)
@@ -358,6 +367,9 @@ static auto validLedgerEntryGenerator = autocheck::map(
         case LIQUIDITY_POOL:
             makeValid(led.liquidityPool());
             break;
+        case SPEEDEX_CONFIG:
+            makeValid(led.speedexConfig());
+            break;
         }
 
         return std::move(le);
@@ -407,16 +419,66 @@ static auto validLiquidityPoolEntryGenerator = autocheck::map(
     autocheck::generator<LiquidityPoolEntry>());
 
 LedgerEntry
-generateValidLedgerEntry(size_t b)
+generateValidLedgerEntry(size_t b, bool allowSpeedexConfig)
 {
-    return validLedgerEntryGenerator(b);
+    while(true) {
+        auto entry = validLedgerEntryGenerator(b);
+        if (allowSpeedexConfig || entry.data.type() != SPEEDEX_CONFIG) {
+            return entry;
+        }
+    }
+}
+
+void dedupSpeedexConfig(std::vector<LedgerEntry>& entries, bool& existsSpeedexAlready)
+{
+    for (auto iter = entries.begin(); iter != entries.end();) {
+        if (iter -> data.type() == SPEEDEX_CONFIG) {
+            if (existsSpeedexAlready) {
+                iter = entries.erase(iter);
+            } else {
+                ++iter;
+            }
+            existsSpeedexAlready = true;
+        } else {
+            ++iter;
+        }
+    }
 }
 
 std::vector<LedgerEntry>
-generateValidLedgerEntries(size_t n)
+generateValidLedgerEntries(size_t n, bool allowSpeedexConfig)
 {
     static auto vecgen = autocheck::list_of(validLedgerEntryGenerator);
-    return vecgen(n);
+
+    std::vector<LedgerEntry> output;
+    bool existsSpeedexConfig = !allowSpeedexConfig;
+    while (output.size() < n) {
+        auto candidates = vecgen(n - output.size());
+        dedupSpeedexConfig(candidates, existsSpeedexConfig);
+        output.insert(output.end(), candidates.begin(), candidates.end());
+    }
+    return output;
+}
+
+std::vector<LedgerKey>
+generateValidLedgerKeysNoSpeedexConfig(size_t n)
+{
+    static auto singleGenerator = autocheck::such_that(
+        [](LedgerKey const& key) -> bool {
+            return key.type() != SPEEDEX_CONFIG;
+    }, autocheck::generator<LedgerKey>());
+    return autocheck::list_of(singleGenerator)(n);
+}
+
+LedgerKey
+generateValidLedgerKeyNoSpeedex(size_t b)
+{
+    static auto singleGenerator = autocheck::such_that(
+        [](LedgerKey const& key) -> bool {
+            return key.type() != SPEEDEX_CONFIG;
+        }, autocheck::generator<LedgerKey>());
+
+    return singleGenerator(b);
 }
 
 AccountEntry

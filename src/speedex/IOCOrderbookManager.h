@@ -44,6 +44,8 @@ public:
 
 	void clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& batchSolution);
 
+	size_t numOpenOrderbooks() const;
+
 };
 
 }

@@ -151,8 +151,10 @@ BallotProtocol::recordEnvelope(SCPEnvelopeWrapperPtr env)
 SCP::EnvelopeState
 BallotProtocol::processEnvelope(SCPEnvelopeWrapperPtr envelope, bool self)
 {
+
     ZoneScoped;
     dbgAssert(envelope->getStatement().slotIndex == mSlot.getSlotIndex());
+
 
     SCPStatement const& statement = envelope->getStatement();
     NodeID const& nodeID = statement.nodeID;
@@ -211,6 +213,7 @@ BallotProtocol::processEnvelope(SCPEnvelopeWrapperPtr envelope, bool self)
 
         recordEnvelope(envelope);
         advanceSlot(statement);
+
         return SCP::EnvelopeState::VALID;
     }
 
@@ -220,6 +223,7 @@ BallotProtocol::processEnvelope(SCPEnvelopeWrapperPtr envelope, bool self)
     if (mCommit->getBallot().value == getWorkingBallot(statement).value)
     {
         recordEnvelope(envelope);
+
         return SCP::EnvelopeState::VALID;
     }
 
@@ -230,6 +234,7 @@ BallotProtocol::processEnvelope(SCPEnvelopeWrapperPtr envelope, bool self)
                    "self, skipping e: {}",
                    mSlot.getSCP().envToStr(envelope->getEnvelope()));
     }
+
 
     return SCP::EnvelopeState::INVALID;
 }

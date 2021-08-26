@@ -248,19 +248,52 @@ int64_t canSellAtMostBasedOnSheep(LedgerTxnHeader const& header,
                                   ConstTrustLineWrapper const& sheepLine,
                                   Price const& wheatPrice);
 
+/*
 int64_t canSellAtMost(LedgerTxnHeader const& header,
                       LedgerTxnEntry const& account, Asset const& asset,
                       TrustLineWrapper const& trustLine);
 int64_t canSellAtMost(LedgerTxnHeader const& header,
                       ConstLedgerTxnEntry const& account, Asset const& asset,
                       ConstTrustLineWrapper const& trustLine);
+*/
 
+int64_t
+canSellAtMost(
+    LedgerTxnHeader const& header,
+    Asset const& asset,
+    std::function<LedgerTxnEntry()> sourceLoader,
+    std::function<TrustLineWrapper(Asset const&)> trustLineLoader);
+
+int64_t
+canBuyAtMost(
+    LedgerTxnHeader const& header,
+    Asset const& asset, 
+    std::function<LedgerTxnEntry()> sourceLoader,
+    std::function<TrustLineWrapper(Asset const&)> trustLineLoader);
+
+
+int64_t
+canSellAtMost(
+    LedgerTxnHeader const& header,
+    Asset const& asset,
+    std::function<ConstLedgerTxnEntry()> sourceLoader,
+    std::function<ConstTrustLineWrapper(Asset const&)> trustLineLoader);
+
+int64_t
+canBuyAtMost(
+    LedgerTxnHeader const& header,
+    Asset const& asset, 
+    std::function<ConstLedgerTxnEntry()> sourceLoader,
+    std::function<ConstTrustLineWrapper(Asset const&)> trustLineLoader);
+
+/*
 int64_t canBuyAtMost(LedgerTxnHeader const& header,
                      LedgerTxnEntry const& account, Asset const& asset,
                      TrustLineWrapper const& trustLine);
 int64_t canBuyAtMost(LedgerTxnHeader const& header,
                      ConstLedgerTxnEntry const& account, Asset const& asset,
                      ConstTrustLineWrapper const& trustLine);
+*/
 
 ExchangeResult exchangeV2(int64_t wheatReceived, Price price,
                           int64_t maxWheatReceive, int64_t maxSheepSend);

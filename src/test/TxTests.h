@@ -122,6 +122,12 @@ TransactionFramePtr transactionFromOperations(Application& app,
                                               std::vector<Operation> const& ops,
                                               int fee = 0);
 
+TransactionFramePtr commutativeTxFromOperations(Application& app,
+                                                SecretKey const& from,
+                                                SequenceNumber seq,
+                                                std::vector<Operation> const& ops,
+                                                int fee = 0);
+
 Operation changeTrust(Asset const& asset, int64_t limit);
 Operation changeTrust(ChangeTrustAsset const& asset, int64_t limit);
 

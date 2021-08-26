@@ -461,8 +461,7 @@ void
 LedgerTxnRoot::Impl::dropAccounts()
 {
     throwIfChild();
-    mEntryCache.clear();
-    mBestOffers.clear();
+    clearAllCaches();
 
     mDatabase.getSession() << "DROP TABLE IF EXISTS accounts;";
     mDatabase.getSession() << "DROP TABLE IF EXISTS signers;";

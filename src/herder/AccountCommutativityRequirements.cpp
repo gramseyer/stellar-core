@@ -9,14 +9,14 @@ namespace stellar
 
 bool
 AccountCommutativityRequirements::checkTrustLine(
-	AbstractLedgerTxn& ltx, AccountID account, Asset asset) const
+	AbstractLedgerTxn& ltx, Asset asset) const
 {
 	if (asset.type() == ASSET_TYPE_NATIVE)
 	{
 		return true;
 	}
 
-	auto tl = loadTrustLine(ltx, account, asset);
+	auto tl = loadTrustLine(ltx, mSourceAccount, asset);
 
 	if (!tl) {
 		return false;
@@ -34,7 +34,11 @@ AccountCommutativityRequirements::checkCanAddAssetRequirement(
 		return false;
 	}
 
-	if (!checkTrustLine(ltx, mSourceAccount, asset)) {
+	if (!checkTrustLine(ltx, asset)) {
+		return false;
+	}
+
+	if (!isCommutativeTxEnabledAsset(ltx, asset)) {
 		return false;
 	}
 
@@ -84,11 +88,6 @@ AccountCommutativityRequirements::checkAvailableBalanceSufficesForNewRequirement
 	return false;
 }
 
-//int64_t 
-//AccountCommutativityRequirements::getNativeAssetReqs() {
-//	return mRequiredAssets[getNativeAsset()];
-//}
-
 void
 AccountCommutativityRequirements::cleanZeroedEntries()
 {
@@ -103,6 +102,27 @@ AccountCommutativityRequirements::cleanZeroedEntries()
 		}
 	}
 }
+
+bool 
+AccountCommutativityRequirements::checkAccountHasSufficientBalance(AbstractLedgerTxn& ltx, LedgerTxnHeader& header) {
+	for (auto const& [asset, amount] : mRequiredAssets) {
+		if (!isCommutativeTxEnabledAsset(ltx, asset)) {
+			//std::printf("comm enabled asset fail\n");
+			return false;
+		}
+		if (!checkTrustLine(ltx, asset)) {
+			//std::printf("trustline fail\n");
+			return false;
+		}
+		if (amount > getAvailableBalance(header, ltx, mSourceAccount, asset)) {
+			//std::printf("requirement: %ld currentBalance %ld\n", amount, getAvailableBalance(header, ltx, mSourceAccount, asset));
+
+			return false;
+		}
+	}
+	return true;
+}
+
 
 
 

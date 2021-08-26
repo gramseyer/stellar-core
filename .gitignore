@@ -21,6 +21,9 @@
 *.trs
 *.db
 
+#test nonsense
+archtmp-*
+
 # sourcetrail
 compile_commands.json
 *.srctrlbm

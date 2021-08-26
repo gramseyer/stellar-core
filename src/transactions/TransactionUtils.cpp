@@ -44,6 +44,15 @@ prepareAccountEntryExtensionV2(AccountEntry& ae)
     }
     return extV1.ext.v2();
 }
+AccountEntryExtensionV3&
+prepareAccountEntryExtensionV3(AccountEntry& ae)
+{
+    auto& extV2 = prepareAccountEntryExtensionV2(ae);
+    if (extV2.ext.v() == 0) {
+        extV2.ext.v(3);
+    }
+    return extV2.ext.v3();
+}
 
 TrustLineEntry::_ext_t::_v1_t&
 prepareTrustLineEntryExtensionV1(TrustLineEntry& tl)
@@ -109,6 +118,75 @@ getAccountEntryExtensionV3(AccountEntry const& ae)
     }
     return ae.ext.v1().ext.v2().ext.v3();
 }
+
+bool hasIssuedAssetLog(AccountEntry const& ae, AssetCode const& code)
+{
+    if (!hasAccountEntryExtV3(ae)) {
+        return false;
+    }
+    auto const& v3 = getAccountEntryExtensionV3(ae);
+    for (auto& issuedLog : v3.issuedAmounts) {
+        if (issuedLog.code == code) {
+            return true;
+        }
+    }
+    return false;
+}
+
+IssuedAssetLog& getIssuedAssetLog(AccountEntry& ae, AssetCode const& code) {
+    auto& v3 = getAccountEntryExtensionV3(ae);
+    for (auto& issuedLog : v3.issuedAmounts) {
+        if (issuedLog.code == code) {
+            return issuedLog;
+        }
+    }
+    throw std::runtime_error("issued asset code not found");
+}
+
+IssuedAssetLog const& getIssuedAssetLog(AccountEntry const& ae, AssetCode const& code) {
+    auto const& v3 = getAccountEntryExtensionV3(ae);
+    for (auto const& issuedLog : v3.issuedAmounts) {
+        if (issuedLog.code == code) {
+            return issuedLog;
+        }
+    }
+    throw std::runtime_error("issued asset code not found");
+}
+
+static bool
+IssuedAssetLogSorter(IssuedAssetLog const& l1, IssuedAssetLog const& l2) {
+    return l1.code < l2.code;
+}
+
+void addNewIssuedAssetLog(AccountEntry& ae, AssetCode const& code) {
+    if (hasIssuedAssetLog(ae, code)) {
+        throw std::runtime_error("asset issuance log already exists");
+    }
+
+    if (!hasAccountEntryExtV3(ae)) {
+        prepareAccountEntryExtensionV3(ae);
+    }
+
+    auto& v3 = getAccountEntryExtensionV3(ae);
+
+    IssuedAssetLog newLog;
+    newLog.code = code;
+    newLog.issuedAmount = 0;
+    v3.issuedAmounts.push_back(newLog);
+    std::sort(v3.issuedAmounts.begin(), v3.issuedAmounts.end(), IssuedAssetLogSorter);
+}
+
+void trimIssuedAssetLog(AccountEntry& ae, AssetCode const& code) {
+    auto& v3 = getAccountEntryExtensionV3(ae);
+    for (auto iter = v3.issuedAmounts.begin(); iter != v3.issuedAmounts.end(); iter++) {
+        if (iter -> code == code) {
+            v3.issuedAmounts.erase(iter);
+            return;
+        }
+    }
+    throw std::runtime_error("can't delete nonexistent issuance log!");
+}
+
 
 TrustLineEntryExtensionV2&
 getTrustLineEntryExtensionV2(TrustLineEntry& tl)
@@ -522,42 +600,29 @@ addBalance(LedgerTxnHeader const& header, LedgerTxnEntry& entry, int64_t delta)
     }
 }
 
-bool issueAsset(LedgerTxnEntry& entry, int64_t delta)
+bool issueAsset(LedgerTxnEntry& entry, AssetCode const& code, int64_t delta)
 {
     if (entry.current().data.type() == ACCOUNT)
     {
-
-        if (!isCommutativeTxEnabledAsset(entry.current())) {
-            if (hasAccountEntryExtV3(entry.current().data.account()))
-            {
-                auto& v3 = getAccountEntryExtensionV3(entry.current().data.account());
-                if (v3.totalAssetIssued) {
-                    if (INT64_MAX - *v3.totalAssetIssued < delta)
-                    {
-                        v3.totalAssetIssued = nullptr;
-                    } else {
-                        *v3.totalAssetIssued += delta;
-                    }
-                }
+        if (isIssuanceLimitedAccount(entry)) {
+            auto& ae = entry.current().data.account();
+            if (!hasAccountEntryExtV3(ae)) {
+                prepareAccountEntryExtensionV3(ae);
             }
-            return true;
-        }
-
-        if (hasAccountEntryExtV3(entry.current().data.account()))
-        {
-            auto& v3 = getAccountEntryExtensionV3(entry.current().data.account());
-
-            if (!v3.totalAssetIssued) {
-                throw std::logic_error("issuance limit asset not tracking total issuance");
+            if (!hasIssuedAssetLog(ae, code)) {
+                addNewIssuedAssetLog(ae, code);
             }
-            if (INT64_MAX - *v3.totalAssetIssued < delta) {
+            auto& log = getIssuedAssetLog(ae, code);
+            if (INT64_MAX - log.issuedAmount < delta) {
                 return false;
             }
-            *v3.totalAssetIssued += delta;
+            log.issuedAmount += delta;
+            if (log.issuedAmount == 0) {
+                trimIssuedAssetLog(ae, code);
+            }
             return true;
-
         }
-        throw std::logic_error("issuance limit asset had no v3");
+        return true;
     }
     throw std::logic_error("can't issue on non Account entry");
 }
@@ -976,22 +1041,31 @@ isAuthorizedToMaintainLiabilitiesUnsafe(uint32_t flags)
 }
 
 bool
-isCommutativeTxEnabledAsset(uint32_t flags)
+isIssuanceLimitedAccount(uint32_t flags)
 {
     return (flags & AUTH_ISSUANCE_LIMIT) != 0;
 }
 
 bool
-isCommutativeTxEnabledAsset(LedgerEntry const& entry)
+isIssuanceLimitedAccount(LedgerEntry const& entry)
 {
-    return isCommutativeTxEnabledAsset(entry.data.account().flags);
+    return isIssuanceLimitedAccount(entry.data.account().flags);
+}
+
+bool
+isIssuanceLimitedAccount(LedgerTxnEntry const& entry)
+{
+    return isIssuanceLimitedAccount(entry.current());
 }
 
 bool isCommutativeTxEnabledAsset(AbstractLedgerTxn& ltx, Asset const& asset) {
+    if (asset.type() == ASSET_TYPE_NATIVE) {
+        return true;
+    }
     auto issuerID = getIssuer(asset);
     auto acct = loadAccount(ltx, issuerID);
     if (!acct) return false;
-    return isCommutativeTxEnabledAsset(acct.current());
+    return isIssuanceLimitedAccount(acct.current());
 }
 
 bool isCommutativeTxEnabledAsset(AbstractLedgerTxn& ltx, TrustLineAsset const& tlAsset) {
@@ -1101,34 +1175,47 @@ isImmutableAuth(LedgerTxnEntry const& entry)
     return isImmutableAuth(entry.current());
 }
 
+
+
 int64_t 
-getRemainingAssetIssuance(LedgerEntry const& entry)
+getRemainingAssetIssuance(LedgerEntry const& entry, AssetCode const& code)
 {
-    if (entry.data.type() == ACCOUNT) 
+    if (entry.data.type() == ACCOUNT)
     {
-        if (!isCommutativeTxEnabledAsset(entry)) {
-            return INT64_MAX;
+        auto issuedAmount = getIssuedAssetAmount(entry, code);
+        if (issuedAmount) {
+            return INT64_MAX - *issuedAmount;
         }
-        if (!hasAccountEntryExtV3(entry.data.account()))
-        {
-            throw std::logic_error("asset issuance total is missing");
-        }
-
-        auto const& v3 = getAccountEntryExtensionV3(entry.data.account());
-
-        if (!v3.totalAssetIssued) {
-            throw std::logic_error("total asset issued was untracked in ext v3");
-        }
-
-        return INT64_MAX - *(v3.totalAssetIssued);
+        return INT64_MAX;
     }
     throw std::logic_error("invalid asset issuance limit request");
 }
 
 int64_t
-getRemainingAssetIssuance(LedgerTxnEntry const& entry)
+getRemainingAssetIssuance(LedgerTxnEntry const& entry, AssetCode const& code)
 {
-    return getRemainingAssetIssuance(entry.current());
+    return getRemainingAssetIssuance(entry.current(), code);
+}
+
+std::optional<int64_t> 
+getIssuedAssetAmount(LedgerEntry const& entry, AssetCode const& code) {
+    if (entry.data.type() == ACCOUNT) {
+        if (!isIssuanceLimitedAccount(entry)) {
+            return std::nullopt;
+        }
+        auto& ae = entry.data.account();
+        if (!hasIssuedAssetLog(ae, code)) {
+            return 0;
+        }
+        auto& issuedLog = getIssuedAssetLog(ae, code);
+        return issuedLog.issuedAmount;
+    }
+    throw std::logic_error("invalid assue issue amount request");
+}
+
+std::optional<int64_t> 
+getIssuedAssetAmount(LedgerTxnEntry const& entry, AssetCode const& code) {
+    return getIssuedAssetAmount(entry.current(), code);
 }
 
 void
@@ -1273,7 +1360,6 @@ hasAccountEntryExtV3(AccountEntry const& ae)
     return hasAccountEntryExtV2(ae) && ae.ext.v1().ext.v2().ext.v() == 3;
 }
 
-
 bool
 hasTrustLineEntryExtV2(TrustLineEntry const& tl)
 {
@@ -1303,12 +1389,30 @@ getAsset(AccountID const& issuer, AssetCode const& assetCode)
     return asset;
 }
 
-Asset getNativeAsset() {
+Asset getNativeAsset()
+{
     Asset asset;
     asset.type(ASSET_TYPE_NATIVE);
     return asset;
 }
 
+AssetCode getAssetCode(Asset const& asset)
+{
+    AssetCode out;
+    if (asset.type() == ASSET_TYPE_CREDIT_ALPHANUM4) {
+        out.type(ASSET_TYPE_CREDIT_ALPHANUM4);
+        out.assetCode4() = asset.alphaNum4().assetCode;
+        return out;
+    }
+    if (asset.type() == ASSET_TYPE_CREDIT_ALPHANUM12) {
+        out.type(ASSET_TYPE_CREDIT_ALPHANUM12);
+        out.assetCode12() = asset.alphaNum12().assetCode;
+        return out;
+    }
+    throw std::runtime_error("invalid asset type for making asset code");
+}
+
+/*
 AccountID getIssuer(Asset const& asset) {
     if (asset.type() == ASSET_TYPE_CREDIT_ALPHANUM4) {
         return asset.alphaNum4().issuer;
@@ -1317,7 +1421,7 @@ AccountID getIssuer(Asset const& asset) {
         return asset.alphaNum12().issuer;
     }
     throw std::runtime_error("unexpected asset type");
-}
+} */
 
 
 bool

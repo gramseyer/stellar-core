@@ -194,6 +194,12 @@ TransactionFrame::getCommutativityRequirements(AbstractLedgerTxn& ltx) const
     return reqs;
 }
 
+UnorderedSet<AccountID>
+TransactionFrame::getRelevantAccounts() const 
+{
+    return {getSourceID(), getFeeSourceID()};
+}
+
 int64_t
 TransactionFrame::getMinFee(LedgerHeader const& header) const
 {
@@ -578,6 +584,8 @@ TransactionFrame::processSignatures(ValidationType cv,
 bool
 TransactionFrame::isBadSeq(LedgerTxnHeader const& header, int64_t seqNum) const
 {
+    //std::printf("seqNum = %lu getSeqNum() == %lu getStartingSequenceNumber(header) == %lu\n",
+    //    seqNum, getSeqNum(), getStartingSequenceNumber(header));
     return seqNum == INT64_MAX || seqNum + 1 != getSeqNum() ||
            getSeqNum() == getStartingSequenceNumber(header);
 }

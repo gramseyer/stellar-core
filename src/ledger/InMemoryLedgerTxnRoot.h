@@ -75,6 +75,7 @@ class InMemoryLedgerTxnRoot : public AbstractLedgerTxnParent
     void dropTrustLines() override;
     void dropClaimableBalances() override;
     void dropLiquidityPools() override;
+    void dropSpeedexConfigs() override;
     double getPrefetchHitRate() const override;
     uint32_t prefetch(UnorderedSet<LedgerKey> const& keys) override;
 

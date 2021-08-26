@@ -634,6 +634,7 @@ TEST_CASE("BucketListIsConsistentWithDatabase deleted entries",
 {
     for (auto t : xdr::xdr_traits<LedgerEntryType>::enum_values())
     {
+        if (t == SPEEDEX_CONFIG) continue;
         size_t nTests = 0;
         while (nTests < 10)
         {
@@ -656,6 +657,7 @@ TEST_CASE("BucketListIsConsistentWithDatabase modified entries",
 {
     for (auto t : xdr::xdr_traits<LedgerEntryType>::enum_values())
     {
+        if (t == SPEEDEX_CONFIG) continue;
         size_t nTests = 0;
         while (nTests < 10)
         {
@@ -795,6 +797,9 @@ TEST_CASE("BucketListIsConsistentWithDatabase merged LIVEENTRY and DEADENTRY",
     testutil::BucketListDepthModifier bldm(3);
     for (auto t : xdr::xdr_traits<LedgerEntryType>::enum_values())
     {
+        if (t == SPEEDEX_CONFIG) {
+            continue;
+        }
         uint32_t nTests = 0;
         while (nTests < 5)
         {

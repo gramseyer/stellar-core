@@ -372,6 +372,12 @@ FeeBumpTransactionFrame::getCommutativityRequirements(AbstractLedgerTxn& ltx) co
     return std::nullopt;
 }
 
+UnorderedSet<AccountID>
+FeeBumpTransactionFrame::getRelevantAccounts() const 
+{
+    return {getSourceID(), getFeeSourceID()};
+}
+
 
 void
 FeeBumpTransactionFrame::insertKeysForFeeProcessing(

@@ -28,12 +28,18 @@ void makeValid(OfferEntry& o);
 void makeValid(DataEntry& d);
 void makeValid(ClaimableBalanceEntry& c);
 void makeValid(LiquidityPoolEntry& lp);
+void makeValid(SpeedexConfigEntry& sce);
 void makeValid(LedgerHeaderHistoryEntry& lh,
                LedgerHeaderHistoryEntry firstLedger,
                HistoryManager::LedgerVerificationStatus state);
 
-LedgerEntry generateValidLedgerEntry(size_t b = 3);
-std::vector<LedgerEntry> generateValidLedgerEntries(size_t n);
+LedgerEntry generateValidLedgerEntry(size_t b = 3, bool allowSpeedexConfig = false);
+std::vector<LedgerEntry> generateValidLedgerEntries(size_t n, bool allowSpeedexConfig = false);
+std::vector<LedgerKey>
+generateValidLedgerKeysNoSpeedexConfig(size_t n);
+
+LedgerKey
+generateValidLedgerKeyNoSpeedex(size_t b = 3);
 
 AccountEntry generateValidAccountEntry(size_t b = 3);
 std::vector<AccountEntry> generateValidAccountEntries(size_t n);

@@ -126,6 +126,10 @@ template <> class hash<stellar::LedgerKey>
             res = stellar::shortHash::computeHash(stellar::ByteSlice(
                 lk.liquidityPool().liquidityPoolID.data(), 8));
             break;
+        case stellar::SPEEDEX_CONFIG:
+            res = stellar::shortHash::computeHash(stellar::ByteSlice(
+                "SPEEDEX_CONFIG", 14));
+            break;
         default:
             abort();
         }

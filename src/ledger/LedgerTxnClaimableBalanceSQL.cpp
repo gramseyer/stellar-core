@@ -353,9 +353,8 @@ void
 LedgerTxnRoot::Impl::dropClaimableBalances()
 {
     throwIfChild();
-    mEntryCache.clear();
-    mBestOffers.clear();
-
+    clearAllCaches();
+    
     std::string coll = mDatabase.getSimpleCollationClause();
 
     mDatabase.getSession() << "DROP TABLE IF EXISTS claimablebalance;";

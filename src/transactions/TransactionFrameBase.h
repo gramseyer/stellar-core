@@ -59,6 +59,9 @@ class TransactionFrameBase
     virtual std::optional<TransactionCommutativityRequirements>
     getCommutativityRequirements(AbstractLedgerTxn& ltx) const = 0;
 
+    virtual UnorderedSet<AccountID>
+    getRelevantAccounts() const = 0;
+
     virtual void
     insertKeysForFeeProcessing(UnorderedSet<LedgerKey>& keys) const = 0;
     virtual void insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const = 0;

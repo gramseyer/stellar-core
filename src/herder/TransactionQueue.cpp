@@ -15,6 +15,7 @@
 #include "util/GlobalChecks.h"
 #include "util/HashOfHash.h"
 #include "util/XDROperators.h"
+#include "util/Logging.h"
 
 #include <Tracy.hpp>
 #include <algorithm>
@@ -319,10 +320,12 @@ TransactionQueue::prepareDropTransaction(AccountState& as, TimestampedTx& tstx)
 TransactionQueue::AddResult
 TransactionQueue::tryAdd(TransactionFrameBasePtr tx)
 {
+    CLOG_INFO(Herder, "start tryAdd");
     ZoneScoped;
     AccountStates::iterator stateIter;
     TimestampedTransactions::iterator oldTxIter;
     auto const res = canAdd(tx, stateIter, oldTxIter);
+    CLOG_INFO(Herder, "got {} from canAdd", res);
     if (res != TransactionQueue::AddResult::ADD_STATUS_PENDING)
     {
         return res;

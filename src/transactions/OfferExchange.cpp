@@ -77,7 +77,95 @@ canSellAtMost(LedgerTxnHeader const& header, ConstLedgerTxnEntry const& account,
     }
 
     return 0;
+} 
+
+//nonconst version
+int64_t
+canSellAtMost(LedgerTxnHeader const& header,
+    Asset const& asset, 
+    std::function<LedgerTxnEntry()> sourceLoader, 
+    std::function<TrustLineWrapper(Asset const&)> trustLineLoader)
+{
+    if (asset.type() == ASSET_TYPE_NATIVE)
+    {
+        auto account = sourceLoader();
+        if (!account) {
+            throw std::runtime_error("failed to load account when computing offer exchange params");
+        } 
+        return std::max({stellar::getAvailableBalance(header, account), int64_t(0)});
+    } else {
+        auto trustLine = trustLineLoader(asset);
+        if (trustLine && trustLine.isAuthorizedToMaintainLiabilities())
+        {
+            return std::max({trustLine.getAvailableBalance(header), int64_t(0)});
+        }
+        return 0;
+    }
 }
+
+//nonconst version
+int64_t
+canBuyAtMost(LedgerTxnHeader const& header,
+    Asset const& asset, 
+    std::function<LedgerTxnEntry()> sourceLoader, 
+    std::function<TrustLineWrapper(Asset const&)> trustLineLoader)
+{
+    if (asset.type() == ASSET_TYPE_NATIVE) {
+        auto account = sourceLoader();
+        if (!account) {
+            throw std::runtime_error("failed to load account when computing offer exchange params");
+        }
+        return std::max({getMaxAmountReceive(header, account), int64_t(0)});
+    } else {
+        auto trustLine = trustLineLoader(asset);
+        return trustLine ? std::max({trustLine.getMaxAmountReceive(header), int64_t(0)}) : 0;
+    }
+}
+
+//const version
+int64_t
+canSellAtMost(LedgerTxnHeader const& header,
+    Asset const& asset, 
+    std::function<ConstLedgerTxnEntry()> sourceLoader, 
+    std::function<ConstTrustLineWrapper(Asset const&)> trustLineLoader)
+{
+    if (asset.type() == ASSET_TYPE_NATIVE)
+    {
+        auto account = sourceLoader();
+        if (!account) {
+            throw std::runtime_error("failed to load account when computing offer exchange params");
+        } 
+        return std::max({stellar::getAvailableBalance(header, account), int64_t(0)});
+    } else {
+        auto trustLine = trustLineLoader(asset);
+        if (trustLine && trustLine.isAuthorizedToMaintainLiabilities())
+        {
+            return std::max({trustLine.getAvailableBalance(header), int64_t(0)});
+        }
+        return 0;
+    }
+}
+
+
+// const versions
+int64_t
+canBuyAtMost(LedgerTxnHeader const& header,
+    Asset const& asset, 
+    std::function<ConstLedgerTxnEntry()> sourceLoader, 
+    std::function<ConstTrustLineWrapper(Asset const&)> trustLineLoader)
+{
+    if (asset.type() == ASSET_TYPE_NATIVE) {
+        auto account = sourceLoader();
+        if (!account) {
+            throw std::runtime_error("failed to load account when computing offer exchange params");
+        }
+        return std::max({getMaxAmountReceive(header, account), int64_t(0)});
+    } else {
+        auto trustLine = trustLineLoader(asset);
+        return trustLine ? std::max({trustLine.getMaxAmountReceive(header), int64_t(0)}) : 0;
+    }
+}
+
 
 int64_t
 canBuyAtMost(LedgerTxnHeader const& header, LedgerTxnEntry const& account,
@@ -769,15 +857,14 @@ applyPriceErrorThresholds(Price price, int64_t wheatReceive, int64_t sheepSend,
 }
 
 void
-adjustOffer(LedgerTxnHeader const& header, LedgerTxnEntry& offer,
-            LedgerTxnEntry const& account, Asset const& wheat,
-            TrustLineWrapper const& wheatLine, Asset const& sheep,
-            TrustLineWrapper const& sheepLine)
+adjustOffer(LedgerTxnHeader const& header, LedgerTxnEntry& offer, Asset const& wheat, Asset const& sheep,
+    std::function<LedgerTxnEntry()> sourceLoader,
+    std::function<TrustLineWrapper(Asset const&)> trustLineLoader)
 {
     OfferEntry& oe = offer.current().data.offer();
     int64_t maxWheatSend =
-        std::min({oe.amount, canSellAtMost(header, account, wheat, wheatLine)});
-    int64_t maxSheepReceive = canBuyAtMost(header, account, sheep, sheepLine);
+        std::min({oe.amount, canSellAtMost(header, wheat, sourceLoader, trustLineLoader)});
+    int64_t maxSheepReceive = canBuyAtMost(header, sheep, sourceLoader, trustLineLoader);
     oe.amount = adjustOffer(oe.price, maxWheatSend, maxSheepReceive);
 }
 
@@ -1115,24 +1202,35 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
 
     // Load necessary accounts and trustlines. Note that any LedgerEntry loaded
     // here was also loaded during releaseLiabilities.
-    LedgerTxnEntry accountB;
-    if (wheat.type() == ASSET_TYPE_NATIVE || sheep.type() == ASSET_TYPE_NATIVE)
-    {
-        accountB = stellar::loadAccount(ltx, accountBID);
-    }
-    auto sheepLineAccountB = loadTrustLineIfNotNative(ltx, accountBID, sheep);
-    auto wheatLineAccountB = loadTrustLineIfNotNative(ltx, accountBID, wheat);
+    auto accountBLoader = [&] () {
+        LedgerTxnEntry accountB;
+        if (wheat.type() == ASSET_TYPE_NATIVE || sheep.type() == ASSET_TYPE_NATIVE)
+        {
+            accountB = stellar::loadAccount(ltx, accountBID);
+        }
+        return accountB;
+    };
+
+    auto trustLineLoader = [&] (Asset const& asset) {
+        return loadTrustLineIfNotNative(ltx, accountBID, asset);
+    };
+
+    //auto sheepLineAccountB = loadTrustLineIfNotNative(ltx, accountBID, sheep);
+    //auto wheatLineAccountB = loadTrustLineIfNotNative(ltx, accountBID, wheat);
 
     // As of the protocol version 10, this call to adjustOffer should have no
     // effect. We leave it here only as a preventative measure.
-    adjustOffer(header, sellingWheatOffer, accountB, wheat, wheatLineAccountB,
-                sheep, sheepLineAccountB);
+    adjustOffer(header, sellingWheatOffer, wheat, sheep, accountBLoader, trustLineLoader);
 
-    int64_t maxWheatSend =
-        canSellAtMost(header, accountB, wheat, wheatLineAccountB);
+    //int64_t maxWheatSend =
+    //    canSellAtMost(header, accountB, wheat, wheatLineAccountB);
+    int64_t maxWheatSend = 
+        canSellAtMost(header, wheat, accountBLoader, trustLineLoader);
     maxWheatSend = std::min({offer.amount, maxWheatSend});
-    int64_t maxSheepReceive =
-        canBuyAtMost(header, accountB, sheep, sheepLineAccountB);
+    //int64_t maxSheepReceive =
+    //    canBuyAtMost(header, accountB, sheep, sheepLineAccountB);
+    int64_t maxSheepReceive = 
+        canBuyAtMost(header, sheep, accountBLoader, trustLineLoader);
     auto exchangeResult =
         exchangeV10(offer.price, maxWheatSend, maxWheatReceived, maxSheepSend,
                     maxSheepReceive, round);
@@ -1146,6 +1244,7 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
     {
         if (sheep.type() == ASSET_TYPE_NATIVE)
         {
+            auto accountB = accountBLoader();
             if (!addBalance(header, accountB, numSheepSend))
             {
                 throw std::runtime_error("overflowed sheep balance");
@@ -1153,6 +1252,7 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
         }
         else
         {
+            auto sheepLineAccountB = trustLineLoader(sheep);
             if (!sheepLineAccountB.addBalance(header, numSheepSend))
             {
                 throw std::runtime_error("overflowed sheep balance");
@@ -1164,6 +1264,7 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
     {
         if (wheat.type() == ASSET_TYPE_NATIVE)
         {
+            auto accountB = accountBLoader();
             if (!addBalance(header, accountB, -numWheatReceived))
             {
                 throw std::runtime_error("overflowed wheat balance");
@@ -1171,6 +1272,7 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
         }
         else
         {
+            auto wheatLineAccountB = trustLineLoader(wheat);
             if (!wheatLineAccountB.addBalance(header, -numWheatReceived))
             {
                 throw std::runtime_error("overflowed wheat balance");
@@ -1181,8 +1283,7 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
     if (wheatStays)
     {
         offer.amount -= numWheatReceived;
-        adjustOffer(header, sellingWheatOffer, accountB, wheat,
-                    wheatLineAccountB, sheep, sheepLineAccountB);
+        adjustOffer(header, sellingWheatOffer, wheat, sheep, accountBLoader, trustLineLoader);
     }
     else
     {

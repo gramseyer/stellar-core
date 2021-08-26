@@ -91,6 +91,9 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
     std::optional<TransactionCommutativityRequirements>
     getCommutativityRequirements(AbstractLedgerTxn& ltx) const override;
 
+    UnorderedSet<AccountID>
+    getRelevantAccounts() const override;
+
     void
     insertKeysForFeeProcessing(UnorderedSet<LedgerKey>& keys) const override;
     void insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const override;

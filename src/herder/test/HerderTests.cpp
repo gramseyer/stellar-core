@@ -72,19 +72,23 @@ TEST_CASE("standalone", "[herder][acceptance]")
 
         SECTION("basic ledger close on valid txs")
         {
+            std::printf("start test\n");
             VirtualTimer setupTimer(*app);
 
             auto feedTx = [&](TransactionFramePtr& tx) {
+                std::printf("feedTx calledn\n");
                 REQUIRE(app->getHerder().recvTransaction(tx) ==
                         TransactionQueue::AddResult::ADD_STATUS_PENDING);
             };
 
             auto waitForExternalize = [&]() {
+                std::printf("waitForExternalize called\n");
                 bool stop = false;
                 auto prev = app->getLedgerManager().getLastClosedLedgerNum();
                 VirtualTimer checkTimer(*app);
 
                 auto check = [&](asio::error_code const& error) {
+                    std::printf("check called\n");
                     REQUIRE(!error);
                     REQUIRE(app->getLedgerManager().getLastClosedLedgerNum() >
                             prev);
@@ -97,11 +101,13 @@ TEST_CASE("standalone", "[herder][acceptance]")
                 checkTimer.async_wait(check);
                 while (!stop)
                 {
+                    std::printf("crank\n");
                     app->getClock().crank(true);
                 }
             };
 
             auto setup = [&](asio::error_code const& error) {
+                std::printf("setup called\n");
                 REQUIRE(!error);
                 // create accounts
                 auto txFrameA = root.tx({createAccount(a1, startingBalance)});
@@ -111,6 +117,7 @@ TEST_CASE("standalone", "[herder][acceptance]")
                 feedTx(txFrameA);
                 feedTx(txFrameB);
                 feedTx(txFrameC);
+                std::printf("done setup\n");
             };
 
             setupTimer.expires_from_now(std::chrono::seconds(0));
@@ -360,7 +367,7 @@ testTxSet(uint32 protocolVersion)
             SECTION("gap middle")
             {
                 int remIdx = 2; // 3rd transaction
-                txSet->sortForApply();
+                txSet->sortForApply();  // Isn't this bugged?  sortForApply doesn't modify mTransactions
                 txSet->mTransactions.erase(txSet->mTransactions.begin() +
                                            (remIdx * 2));
                 txSet->sortForHash();

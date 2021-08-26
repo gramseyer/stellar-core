@@ -132,6 +132,7 @@ Slot::processEnvelope(SCPEnvelopeWrapperPtr envelope, bool self)
 
     SCP::EnvelopeState res;
 
+
     try
     {
         auto& st = envelope->getStatement();
@@ -153,7 +154,7 @@ Slot::processEnvelope(SCPEnvelopeWrapperPtr envelope, bool self)
     }
     catch (...)
     {
-        CLOG_FATAL(SCP, "SCP context ({}): ",
+        CLOG_FATAL(SCP, "SCP Context ({}): ",
                    mSCP.getDriver().toShortString(mSCP.getLocalNodeID()));
         CLOG_FATAL(SCP, "{}", getJsonInfo().toStyledString());
         CLOG_FATAL(SCP, "Exception processing SCP messages at {}, envelope: {}",
@@ -162,6 +163,7 @@ Slot::processEnvelope(SCPEnvelopeWrapperPtr envelope, bool self)
 
         throw;
     }
+
     return res;
 }
 

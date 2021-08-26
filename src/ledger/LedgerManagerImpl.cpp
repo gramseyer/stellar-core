@@ -439,6 +439,7 @@ LedgerManagerImpl::valueExternalized(LedgerCloseData const& ledgerData)
         releaseAssert(false);
     }
 
+
     closeLedgerIf(ledgerData);
 
     auto& cm = mApp.getCatchupManager();
@@ -642,9 +643,12 @@ LedgerManagerImpl::closeLedger(LedgerCloseData const& ledgerData)
     // first, prefetch source accounts for txset, then charge fees
     prefetchTxSourceIds(commutativeTxs);
     prefetchTxSourceIds(noncommutativeTxs);
-    processFeesSeqNums(commutativeTxs, ltx, txSet->getBaseFee(header.current()),
+    auto baseFee = txSet -> getBaseFee(header.current());
+    processFeesSeqNums(commutativeTxs, ltx, baseFee,
                        ledgerCloseMeta);
-    processFeesSeqNums(noncommutativeTxs, ltx, txSet->getBaseFee(header.current()),
+    //header is no longer valid -- the ltx.commit inside processFeesSeqNums invalidates it.
+
+    processFeesSeqNums(noncommutativeTxs, ltx, baseFee,
                        ledgerCloseMeta);
 
     TransactionResultSet txResultSet;

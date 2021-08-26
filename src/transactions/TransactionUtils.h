@@ -39,6 +39,7 @@ findSignerByKey(IterType begin, IterType end, SignerKey const& key)
 
 AccountEntryExtensionV1& prepareAccountEntryExtensionV1(AccountEntry& ae);
 AccountEntryExtensionV2& prepareAccountEntryExtensionV2(AccountEntry& ae);
+AccountEntryExtensionV3& prepareAccountEntryExtensionV3(AccountEntry& ae);
 TrustLineEntry::_ext_t::_v1_t&
 prepareTrustLineEntryExtensionV1(TrustLineEntry& tl);
 TrustLineEntryExtensionV2& prepareTrustLineEntryExtensionV2(TrustLineEntry& tl);
@@ -47,6 +48,12 @@ LedgerEntryExtensionV1& prepareLedgerEntryExtensionV1(LedgerEntry& le);
 AccountEntryExtensionV2& getAccountEntryExtensionV2(AccountEntry& ae);
 AccountEntryExtensionV3& getAccountEntryExtensionV3(AccountEntry& ae);
 AccountEntryExtensionV3 const& getAccountEntryExtensionV3(AccountEntry const& ae);
+
+bool hasIssuedAssetLog(AccountEntry const& ae, AssetCode const& code);
+IssuedAssetLog& getIssuedAssetLog(AccountEntry& ae, AssetCode const& code);
+IssuedAssetLog const& getIssuedAssetLog(AccountEntry const& ae, AssetCode const& code);
+void addNewIssuedAssetLog(AccountEntry& ae, AssetCode const& code);
+void trimIssuedAssetLog(AccountEntry& ae, AssetCode const& code);
 
 TrustLineEntryExtensionV2& getTrustLineEntryExtensionV2(TrustLineEntry& le);
 LedgerEntryExtensionV1& getLedgerEntryExtensionV1(LedgerEntry& le);
@@ -189,9 +196,10 @@ bool isAuthorizedToMaintainLiabilities(LedgerEntry const& le);
 bool isAuthorizedToMaintainLiabilities(LedgerTxnEntry const& entry);
 bool isAuthorizedToMaintainLiabilities(ConstLedgerTxnEntry const& entry);
 
-bool isCommutativeTxEnabledAsset(uint32_t flags);
+bool isIssuanceLimitedAccount(uint32_t flags);
 // checks the asset issued by the account in entry
-bool isCommutativeTxEnabledAsset(LedgerEntry const& entry);
+bool isIssuanceLimitedAccount(LedgerEntry const& entry);
+bool isIssuanceLimitedAccount(LedgerTxnEntry const& entry);
 
 bool isCommutativeTxEnabledAsset(AbstractLedgerTxn& ltx, Asset const& asset);
 bool isCommutativeTxEnabledAsset(AbstractLedgerTxn& ltx, TrustLineAsset const& tlAsset);
@@ -213,10 +221,15 @@ bool isClawbackEnabledOnClaimableBalance(LedgerEntry const& entry);
 bool isImmutableAuth(LedgerEntry const& entry);
 bool isImmutableAuth(LedgerTxnEntry const& entry);
 
-int64_t getRemainingAssetIssuance(LedgerEntry const& entry);
-int64_t getRemainingAssetIssuance(LedgerTxnEntry const& entry);
+int64_t getRemainingAssetIssuance(LedgerEntry const& entry, AssetCode const& code);
+int64_t getRemainingAssetIssuance(LedgerTxnEntry const& entry, AssetCode const& code);
 
-bool issueAsset(LedgerTxnEntry& entry, int64_t delta);
+std::optional<int64_t> 
+getIssuedAssetAmount(LedgerEntry const& entry, AssetCode const& code);
+std::optional<int64_t> 
+getIssuedAssetAmount(LedgerTxnEntry const& entry, AssetCode const& code);
+
+bool issueAsset(LedgerTxnEntry& entry, AssetCode const& code, int64_t delta);
 
 void releaseLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header,
                         LedgerTxnEntry const& offer);
@@ -243,8 +256,9 @@ bool hasTrustLineEntryExtV2(TrustLineEntry const& tl);
 
 Asset getAsset(AccountID const& issuer, AssetCode const& assetCode);
 Asset getNativeAsset();
+AssetCode getAssetCode(Asset const& asset);
 
-AccountID getIssuer(Asset const& asset);
+//AccountID getIssuer(Asset const& asset);
 
 bool claimableBalanceFlagIsValid(ClaimableBalanceEntry const& cb);
 void removeOffersByAccountAndAsset(AbstractLedgerTxn& ltx,

@@ -1654,7 +1654,6 @@ LedgerTxn::getSpeedexIOCOffers() {
 IOCOrderbookManager & 
 LedgerTxn::Impl::getSpeedexIOCOffers() {
     throwIfChild();
-    throwIfSealed();
     //TODO some check to see whether parent has any offers that aren't included here?
     return mSpeedexIOCOrderbooks;
 }
@@ -1855,6 +1854,12 @@ void
 LedgerTxn::dropLiquidityPools()
 {
     throw std::runtime_error("called dropLiquidityPools on non-root LedgerTxn");
+}
+
+void
+LedgerTxn::dropSpeedexConfigs()
+{
+    throw std::runtime_error("called dropSpeedexConfigs on non-root LedgerTxn");
 }
 
 double
@@ -2359,6 +2364,15 @@ LedgerTxnRoot::Impl::throwIfChild() const
     }
 }
 
+void 
+LedgerTxnRoot::Impl::clearAllCaches() const
+{
+    mEntryCache.clear();
+    mBestOffers.clear();
+    mSnapshotCache.clear();
+}
+
+
 void
 LedgerTxnRoot::commitChild(EntryIterator iter, LedgerTxnConsistency cons)
 {
@@ -2687,6 +2701,12 @@ void
 LedgerTxnRoot::dropLiquidityPools()
 {
     mImpl->dropLiquidityPools();
+}
+
+void
+LedgerTxnRoot::dropSpeedexConfigs()
+{
+    mImpl -> dropSpeedexConfigs();
 }
 
 uint32_t
@@ -3291,6 +3311,10 @@ LedgerTxnRoot::Impl::getNewestVersion(InternalLedgerKey const& gkey) const
             entry = loadLiquidityPool(key);
             break;
         case SPEEDEX_CONFIG:
+            //Note that the mocking of the config makes it as though
+            // logically, there exists a speedex config at genesis.
+            // This breaks tests that assume keys don't exist until
+            // they're created.
             entry = loadSpeedexConfig(key);
             break;
         default:
@@ -3401,7 +3425,10 @@ LedgerTxnRoot::Impl::loadSnapshotEntry(LedgerKey const& key) const {
                            "LedgerTxnRoot");
     }
 
-    putInSnapshotCache(key, entry);
+    if (entry) {
+        putInSnapshotCache(key, entry);
+    }
+
     return entry;
 }
 
@@ -3468,9 +3495,7 @@ LedgerTxnRoot::Impl::getFromSnapshotCache(LedgerKey const& key) const
 {
     try
     {
-
         return mSnapshotCache.get(key);
-        auto cached = mSnapshotCache.get(key);
     }
     catch (...)
     {
@@ -3505,7 +3530,7 @@ LedgerTxnRoot::Impl::putInSnapshotCache(
     }
     catch (...)
     {
-        mEntryCache.clear();
+        mSnapshotCache.clear();
         throw;
     }
 }

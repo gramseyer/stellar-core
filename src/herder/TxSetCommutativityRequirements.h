@@ -13,6 +13,7 @@
 namespace stellar {
 
 class AbstractLedgerTxn;
+class LedgerTxnHeader;
 
 class TxSetCommutativityRequirements {
 
@@ -31,10 +32,14 @@ public:
 
 	bool tryAddTransaction(TransactionFrameBasePtr tx, AbstractLedgerTxn& ltx);
 
+	bool validateAndAddTransaction(TransactionFrameBasePtr tx, AbstractLedgerTxn& ltx);
+
 	bool tryReplaceTransaction(TransactionFrameBasePtr newTx, TransactionFrameBasePtr oldTx, AbstractLedgerTxn& ltx);
 
 	// returns true if account has been removed from the map
 	bool tryCleanAccountEntry(AccountID account);
+
+	bool checkAccountHasSufficientBalance(AccountID account, AbstractLedgerTxn& ltx, LedgerTxnHeader& header);
 
 
 };

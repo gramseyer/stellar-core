@@ -350,8 +350,7 @@ void
 LedgerTxnRoot::Impl::dropTrustLines()
 {
     throwIfChild();
-    mEntryCache.clear();
-    mBestOffers.clear();
+    clearAllCaches();
 
     std::string coll = mDatabase.getSimpleCollationClause();
 

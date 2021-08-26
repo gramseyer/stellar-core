@@ -69,6 +69,8 @@ calculateDeltaBalance(LedgerEntry const* current, LedgerEntry const* previous)
         }
         return delta;
     }
+    case SPEEDEX_CONFIG:
+        break;
     }
     return 0;
 }

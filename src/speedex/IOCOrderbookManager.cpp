@@ -6,6 +6,8 @@
 
 #include "transactions/TransactionUtils.h"
 
+#include "util/types.h"
+
 namespace stellar {
 
 void 
@@ -27,11 +29,18 @@ IOCOrderbookManager::getOrCreateOrderbook(AssetPair assetPair) {
 	return (mOrderbooks.emplace(assetPair, assetPair).first->second);
 }
 
+size_t
+IOCOrderbookManager::numOpenOrderbooks() const {
+	return mOrderbooks.size();
+}
+
 void
 IOCOrderbookManager::commitChild(const IOCOrderbookManager& child) {
-	throwIfSealed();
-	for (const auto& orderbook : child.mOrderbooks) {
-		getOrCreateOrderbook(orderbook.first).commitChild(orderbook.second);
+	if (child.numOpenOrderbooks() > 0) {
+		throwIfSealed();
+		for (const auto& orderbook : child.mOrderbooks) {
+			getOrCreateOrderbook(orderbook.first).commitChild(orderbook.second);
+		}
 	}
 }
 
@@ -43,7 +52,6 @@ IOCOrderbookManager::addOffer(AssetPair assetPair, const IOCOffer& offer) {
 
 void
 IOCOrderbookManager::clear() { // no offer unwinding here b/c only called when ltx rollsback
-	throwIfSealed();
 	mOrderbooks.clear();
 }
 
@@ -110,6 +118,7 @@ IOCOrderbookManager::clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& sol
 		}
 		returnToSource(ltx, asset, roundingError);
 	}
+	mOrderbooks.clear();
 }
 
 } /* stellar */

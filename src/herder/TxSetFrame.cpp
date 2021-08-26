@@ -331,11 +331,15 @@ TxSetFrame::checkOrTrim(Application& app,
                         hexAbbrev(mPreviousLedgerHash), lastSeq,
                         xdr_to_string(tx->getEnvelope(), "TransactionEnvelope"),
                         tx->getResultCode());
+                    //std::printf("individual tx failed a validity check\n");
                     return false;
                 }
-                trimmed.emplace_back(tx);
-                removeTx(tx);
-                iter = kv.second.erase(iter);
+                while (iter != kv.second.end()) {
+                    trimmed.emplace_back(*iter);
+                    removeTx(*iter);
+                    iter = kv.second.erase(iter);
+                }
+                continue;
             }
             else
             {
@@ -351,8 +355,8 @@ TxSetFrame::checkOrTrim(Application& app,
                     }
                     while(iter != kv.second.end())
                     {
-                        trimmed.emplace_back(tx);
-                        removeTx(tx);
+                        trimmed.emplace_back(*iter);
+                        removeTx(*iter);
                         iter = kv.second.erase(iter);
                     }
                     continue;
@@ -364,7 +368,7 @@ TxSetFrame::checkOrTrim(Application& app,
 
                 lastSeq = tx->getSeqNum();
 
-                auto res = reqs.tryAddTransaction(tx, ltx);
+                auto res = reqs.validateAndAddTransaction(tx, ltx);
 
 
                 /*int64_t& accFee = accountFeeMap[tx->getFeeSourceID()];
@@ -388,12 +392,45 @@ TxSetFrame::checkOrTrim(Application& app,
                     }
                     while (iter != kv.second.end())
                     {
-                        trimmed.emplace_back(tx);
-                        removeTx(tx);
+                        trimmed.emplace_back(*iter);
+                        removeTx(*iter);
                         iter = kv.second.erase(iter);
                     }
                     continue;
                 }
+            }
+        }
+    }
+
+    auto header = ltx.loadHeader();
+
+    for (auto& [_, accountTxs] : accountTxMap)
+    {
+        auto iter = accountTxs.begin();
+        while (iter != accountTxs.end()) {
+
+            //std::printf("iter points to %p\n", *iter);
+
+            auto relevantAccounts = (*iter)->getRelevantAccounts();
+            for (auto acct : relevantAccounts) {
+                //TODO cache results of this check
+                if (!reqs.checkAccountHasSufficientBalance(acct, ltx, header)) {
+                    if (justCheck) {
+                        CLOG_DEBUG(
+                            Herder,
+                            "Insufficient balance TODO logging");
+                        return false;
+                    }
+                    while (iter != accountTxs.end()) {
+                        trimmed.emplace_back(*iter);
+                        removeTx(*iter);
+                        iter = accountTxs.erase(iter);
+                    }
+                    continue;
+                }
+            }
+            if (iter != accountTxs.end()) {
+                ++iter;
             }
         }
     }
@@ -465,8 +502,14 @@ void
 TxSetFrame::removeTx(TransactionFrameBasePtr tx)
 {
     auto it = std::find(mTransactions.begin(), mTransactions.end(), tx);
-    if (it != mTransactions.end())
+    if (it != mTransactions.end()) {
         mTransactions.erase(it);
+    } /*else {
+        std::printf("failed to remove a tx %p???\n", tx.get());
+        for (auto txHad : mTransactions) {
+            std::printf("had tx: %p\n", txHad.get());
+        }
+    }*/
     mHash.reset();
     mValid.reset();
 }

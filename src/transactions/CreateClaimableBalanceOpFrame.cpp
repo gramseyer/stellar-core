@@ -155,7 +155,6 @@ bool
 CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
 {
     auto header = ltx.loadHeader();
-    auto sourceAccount = loadSourceAccount(ltx, header);
 
     auto const& claimants = mCreateClaimableBalance.claimants;
 
@@ -171,6 +170,8 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
 
     if (asset.type() == ASSET_TYPE_NATIVE)
     {
+        auto sourceAccount = loadSourceAccount(ltx, header);
+
         if (getAvailableBalance(header, sourceAccount) < amount)
         {
             innerResult().code(CREATE_CLAIMABLE_BALANCE_UNDERFUNDED);
@@ -182,22 +183,24 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
     }
     else
     {
-        auto trustline = loadTrustLine(ltx, getSourceID(), asset);
-        if (!trustline)
         {
-            innerResult().code(CREATE_CLAIMABLE_BALANCE_NO_TRUST);
-            return false;
-        }
-        if (!trustline.isAuthorized())
-        {
-            innerResult().code(CREATE_CLAIMABLE_BALANCE_NOT_AUTHORIZED);
-            return false;
-        }
+            auto trustline = loadTrustLine(ltx, getSourceID(), asset);
+            if (!trustline)
+            {
+                innerResult().code(CREATE_CLAIMABLE_BALANCE_NO_TRUST);
+                return false;
+            }
+            if (!trustline.isAuthorized())
+            {
+                innerResult().code(CREATE_CLAIMABLE_BALANCE_NOT_AUTHORIZED);
+                return false;
+            }
 
-        if (!trustline.addBalance(header, -amount))
-        {
-            innerResult().code(CREATE_CLAIMABLE_BALANCE_UNDERFUNDED);
-            return false;
+            if (!trustline.addBalance(header, -amount))
+            {
+                innerResult().code(CREATE_CLAIMABLE_BALANCE_UNDERFUNDED);
+                return false;
+            }
         }
 
         if (header.current().ledgerVersion >= 17)
@@ -205,10 +208,12 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
             bool enableClawback;
             if (getSourceID() == getIssuer(asset))
             {
+                auto sourceAccount = loadSourceAccount(ltx, header);
                 enableClawback = isClawbackEnabledOnAccount(sourceAccount);
             }
             else
             {
+                auto trustline = loadTrustLine(ltx, getSourceID(), asset);
                 enableClawback = trustline.isClawbackEnabled();
             }
 
@@ -230,6 +235,7 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
         updatePredicatesForApply(claimant.v0().predicate,
                                  header.current().scpValue.closeTime);
     }
+    auto sourceAccount = loadSourceAccount(ltx, header);
 
     switch (createEntryWithPossibleSponsorship(ltx, header, newClaimableBalance,
                                                sourceAccount))
