@@ -409,8 +409,6 @@ TxSetFrame::checkOrTrim(Application& app,
         auto iter = accountTxs.begin();
         while (iter != accountTxs.end()) {
 
-            //std::printf("iter points to %p\n", *iter);
-
             auto relevantAccounts = (*iter)->getRelevantAccounts();
             for (auto acct : relevantAccounts) {
                 //TODO cache results of this check

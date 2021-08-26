@@ -375,7 +375,12 @@ FeeBumpTransactionFrame::getCommutativityRequirements(AbstractLedgerTxn& ltx) co
 UnorderedSet<AccountID>
 FeeBumpTransactionFrame::getRelevantAccounts() const 
 {
-    return {getSourceID(), getFeeSourceID()};
+    auto relevantAccounts = UnorderedSet<AccountID>({getFeeSourceID()});
+    for (auto const& op : mOperations) {
+        relevantAccounts.insert(op.getSourceID());
+    }
+
+    return relevantAccounts;
 }
 
 

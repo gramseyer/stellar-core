@@ -197,7 +197,12 @@ TransactionFrame::getCommutativityRequirements(AbstractLedgerTxn& ltx) const
 UnorderedSet<AccountID>
 TransactionFrame::getRelevantAccounts() const 
 {
-    return {getSourceID(), getFeeSourceID()};
+    auto relevantAccounts = UnorderedSet<AccountID>({getFeeSourceID()});
+    for (auto const& op : mOperations) {
+        relevantAccounts.insert(op.getSourceID());
+    }
+
+    return relevantAccounts;
 }
 
 int64_t
