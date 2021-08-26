@@ -11,6 +11,7 @@
 #include "ledger/LedgerTxnEntry.h"
 #include "ledger/LedgerTxnHeader.h"
 #include "main/Application.h"
+#include "transactions/OperationFrame.h"
 #include "transactions/SignatureChecker.h"
 #include "transactions/SignatureUtils.h"
 #include "transactions/SponsorshipUtils.h"
@@ -376,13 +377,12 @@ UnorderedSet<AccountID>
 FeeBumpTransactionFrame::getRelevantAccounts() const 
 {
     auto relevantAccounts = UnorderedSet<AccountID>({getFeeSourceID()});
-    for (auto const& op : mOperations) {
-        relevantAccounts.insert(op.getSourceID());
+    for (auto const& op : mInnerTx->getOperations()) {
+        relevantAccounts.insert(op->getSourceID());
     }
 
     return relevantAccounts;
 }
-
 
 void
 FeeBumpTransactionFrame::insertKeysForFeeProcessing(

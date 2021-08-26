@@ -198,8 +198,8 @@ UnorderedSet<AccountID>
 TransactionFrame::getRelevantAccounts() const 
 {
     auto relevantAccounts = UnorderedSet<AccountID>({getFeeSourceID()});
-    for (auto const& op : mOperations) {
-        relevantAccounts.insert(op.getSourceID());
+    for (auto const& op : getOperations()) {
+        relevantAccounts.insert(op->getSourceID());
     }
 
     return relevantAccounts;

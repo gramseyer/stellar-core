@@ -106,6 +106,15 @@ TestAccount::tx(std::vector<Operation> const& ops, SequenceNumber sn)
     return transactionFromOperations(mApp, getSecretKey(), sn, ops);
 }
 
+TransactionFramePtr
+TestAccount::commutativeTx(std::vector<Operation> const& ops, SequenceNumber sn)
+{
+    if (sn == 0) {
+        sn = nextSequenceNumber();
+    }
+    return commutativeTxFromOperations(mApp, getSecretKey(), sn, ops);
+}
+
 Operation
 TestAccount::op(Operation operation)
 {

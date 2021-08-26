@@ -18,21 +18,20 @@ LedgerEntry getDefaultSpeedexConfig() {
     LedgerEntry entry;
     entry.data.type(SPEEDEX_CONFIG);
     //TODO mock out default config
-    //TODO sql
     return entry;
 }
 
-
+static LedgerEntry currentSpeedexConfig = getDefaultSpeedexConfig();
 
 std::shared_ptr<LedgerEntry const>
 LedgerTxnRoot::Impl::loadSpeedexConfig(LedgerKey const& key) const
 {
     throwIfNotSpeedexConfig(key.type());
 
-    auto default_config = getDefaultSpeedexConfig();
+   // auto default_config = getDefaultSpeedexConfig();
 
     
-    return std::make_shared<LedgerEntry const>(std::move(default_config));
+    return std::make_shared<LedgerEntry const>(currentSpeedexConfig);
 }
 
 class BulkLoadSpeedexConfigOperation
@@ -50,7 +49,7 @@ class BulkLoadSpeedexConfigOperation
     std::vector<LedgerEntry>
     doSqliteSpecificOperation(soci::sqlite3_session_backend* sq) override
     {
-        return {getDefaultSpeedexConfig()};
+        return {currentSpeedexConfig};
     }
 
 #ifdef USE_POSTGRES
@@ -58,7 +57,7 @@ class BulkLoadSpeedexConfigOperation
     doPostgresSpecificOperation(soci::postgresql_session_backend* pg) override
     {
 
-        return {getDefaultSpeedexConfig()};
+        return {currentSpeedexConfig};
     }
 #endif
 };
@@ -117,6 +116,9 @@ LedgerTxnRoot::Impl::bulkDeleteSpeedexConfig (
 {
     BulkDeleteSpeedexConfigOperation op(mDatabase, cons, entries);
     mDatabase.doDatabaseTypeSpecificOperation(op);
+    if (entries.size() > 0) {
+        currentSpeedexConfig = getDefaultSpeedexConfig();
+    }
 }
 
 class BulkUpsertSpeedexConfigOperation
@@ -157,6 +159,9 @@ LedgerTxnRoot::Impl::bulkUpsertSpeedexConfig(
 {
     BulkUpsertSpeedexConfigOperation op(mDatabase, entries);
     mDatabase.doDatabaseTypeSpecificOperation(op);
+    for (auto const& entry : entries) {
+        currentSpeedexConfig = entry.entry().ledgerEntry();
+    }
 }
 
 void
@@ -165,6 +170,7 @@ LedgerTxnRoot::Impl::dropSpeedexConfigs()
     throwIfChild();
     //TODO do something, right now no-op
     //no op
+    currentSpeedexConfig = getDefaultSpeedexConfig();
     clearAllCaches();
 }
 
