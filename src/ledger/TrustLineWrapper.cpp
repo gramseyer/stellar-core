@@ -358,7 +358,7 @@ TrustLineWrapper::IssuerImpl::addBalance(LedgerTxnHeader const& header,
         // issuer account deleted
         return INT64_MAX;
     }
-    return stellar::issueAsset(mEntry, stellar::getAssetCode(mAsset), delta);
+    return stellar::issueAsset(mEntry, stellar::getAssetCode(mAsset), -delta);
 }
 
 int64_t

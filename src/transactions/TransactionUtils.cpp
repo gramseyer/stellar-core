@@ -613,12 +613,26 @@ bool issueAsset(LedgerTxnEntry& entry, AssetCode const& code, int64_t delta)
                 addNewIssuedAssetLog(ae, code);
             }
             auto& log = getIssuedAssetLog(ae, code);
+
+            if (log.issuedAmount < 0) {
+                throw std::logic_error("started with a negative amount?!?");
+            }
+
             if (INT64_MAX - log.issuedAmount < delta) {
+                return false;
+            }
+       
+            if (delta < 0 && log.issuedAmount + delta < 0)
+            {
+                // somehow debiting an account by more than was ever issued
                 return false;
             }
             log.issuedAmount += delta;
             if (log.issuedAmount == 0) {
                 trimIssuedAssetLog(ae, code);
+            }
+            if (log.issuedAmount < 0) {
+                throw std::logic_error("somehow issued a negative amount of an asset!");
             }
             return true;
         }
@@ -740,7 +754,6 @@ getAvailableBalance(LedgerHeader const& header, LedgerEntry const& le)
     if (le.data.type() == ACCOUNT)
     {
         auto const& acc = le.data.account();
-        std::printf("getMinBalance acc.Balance %lu getMinBalance %lu\n", acc.balance, getMinBalance(header, acc));
         avail = acc.balance - getMinBalance(header, acc);
     }
     else if (le.data.type() == TRUSTLINE)
@@ -758,7 +771,6 @@ getAvailableBalance(LedgerHeader const& header, LedgerEntry const& le)
 
     if (header.ledgerVersion >= 10)
     {
-        std::printf("selling liabilities was %lu\n", getSellingLiabilities(header, le));
         avail -= getSellingLiabilities(header, le);
     }
     return avail;
@@ -1209,7 +1221,7 @@ getIssuedAssetAmount(LedgerEntry const& entry, AssetCode const& code) {
         if (!hasIssuedAssetLog(ae, code)) {
             return 0;
         }
-        auto& issuedLog = getIssuedAssetLog(ae, code);
+        auto const& issuedLog = getIssuedAssetLog(ae, code);
         return issuedLog.issuedAmount;
     }
     throw std::logic_error("invalid assue issue amount request");

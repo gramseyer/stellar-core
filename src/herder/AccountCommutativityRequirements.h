@@ -20,7 +20,8 @@ class AccountCommutativityRequirements {
 
 	AccountID mSourceAccount;
 
-	using AssetMap = UnorderedMap<Asset, int64_t>;
+	//nullopt if somebody overflows
+	using AssetMap = UnorderedMap<Asset, std::optional<int64_t>>;
 
 	AssetMap mRequiredAssets;
 
@@ -45,7 +46,7 @@ public:
 
 	//int64_t getNativeAssetReqs();
 
-	void addAssetRequirement(Asset asset, int64_t amount);
+	void addAssetRequirement(Asset asset, std::optional<int64_t> amount);
 
 	bool checkAvailableBalanceSufficesForNewRequirement(LedgerTxnHeader& header, AbstractLedgerTxn& ltx, Asset asset, int64_t amount);
 

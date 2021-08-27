@@ -43,7 +43,7 @@ AccountCommutativityRequirements::checkCanAddAssetRequirement(
 		return false;
 	}
 
-	auto const& currentRequirement = mRequiredAssets[asset];
+	auto const& currentRequirement = *mRequiredAssets[asset];
 
 	if (INT64_MAX - currentRequirement < amount) {
 		return false;
@@ -60,17 +60,37 @@ AccountCommutativityRequirements::tryAddAssetRequirement(
 		return false;
 	}
 
-	auto& currentRequirement = mRequiredAssets[asset];
+	auto& currentRequirement = *mRequiredAssets[asset];
 
 	currentRequirement += amount;
 	return true;
 }
 void
 AccountCommutativityRequirements::addAssetRequirement(
-	Asset asset, int64_t amount)
+	Asset asset, std::optional<int64_t> amount)
 {
-	std::printf("adding requirement %s %lu prev was %lu\n", assetToString(asset).c_str(), amount, mRequiredAssets[asset]);
-	mRequiredAssets[asset] += amount;
+	if (mRequiredAssets.find(asset) == mRequiredAssets.end()) {
+		mRequiredAssets.emplace(asset, 0);
+	}
+
+	if (!amount) {
+		mRequiredAssets[asset] = std::nullopt;
+		return;
+	}
+	if (amount > 0 && INT64_MAX - *mRequiredAssets[asset] < amount)
+	{
+		mRequiredAssets[asset] = std::nullopt;
+		return;
+	}
+	if (amount < 0 && INT64_MIN - *mRequiredAssets[asset] > amount)
+	{
+		mRequiredAssets[asset] = std::nullopt;
+		return;
+	}
+	if (mRequiredAssets[asset]) {
+		mRequiredAssets[asset] = ((*mRequiredAssets[asset]) + (*amount));
+		return;
+	}
 }
 
 bool
@@ -84,7 +104,11 @@ AccountCommutativityRequirements::checkAvailableBalanceSufficesForNewRequirement
 
 	auto currentBalance = getAvailableBalance(header, ltx, mSourceAccount, asset);
 
-	if (amount + currentRequirement <= currentBalance) {
+	if (!currentRequirement) {
+		return false;
+	}
+
+	if (amount + *currentRequirement <= currentBalance) {
 		return true;
 	}
 	return false;
@@ -98,7 +122,8 @@ AccountCommutativityRequirements::cleanZeroedEntries()
 		if (iter -> second == 0)
 		{
 			iter = mRequiredAssets.erase(iter);
-		} else
+		} 
+		else
 		{
 			iter++;
 		}
@@ -109,25 +134,22 @@ bool
 AccountCommutativityRequirements::checkAccountHasSufficientBalance(AbstractLedgerTxn& ltx, LedgerTxnHeader& header) {
 	for (auto const& [asset, amount] : mRequiredAssets) {
 		if (!isCommutativeTxEnabledAsset(ltx, asset)) {
-			//std::printf("comm enabled asset fail\n");
 			return false;
 		}
 		if (!checkTrustLine(ltx, asset)) {
-			//std::printf("trustline fail\n");
 			return false;
 		}
-		std::printf("requirement: %ld currentBalance %ld\n", amount, getAvailableBalance(header, ltx, mSourceAccount, asset));
+		if (!amount) {
+			return false;
+		}
+		std::printf("requirement: %ld currentBalance %ld\n", *amount, getAvailableBalance(header, ltx, mSourceAccount, asset));
 
-		if (amount > getAvailableBalance(header, ltx, mSourceAccount, asset)) {
+		if (*amount > getAvailableBalance(header, ltx, mSourceAccount, asset)) {
 
 			return false;
 		}
 	}
 	return true;
 }
-
-
-
-
 
 } /* stellar */

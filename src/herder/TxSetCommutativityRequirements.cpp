@@ -71,7 +71,10 @@ TxSetCommutativityRequirements::tryAddTransaction(TransactionFrameBasePtr tx, Ab
 		auto& prevAcctReqs = getRequirements(acct);
 
 		for (auto& req : acctReqs.getRequiredAssets()) {
-			if (!prevAcctReqs.checkAvailableBalanceSufficesForNewRequirement(header, ltx, req.first, req.second))
+			if (!req.second) {
+				return false;
+			}
+			if (!prevAcctReqs.checkAvailableBalanceSufficesForNewRequirement(header, ltx, req.first, *req.second))
 			{
 				return false;
 			}
@@ -88,7 +91,7 @@ TxSetCommutativityRequirements::tryAddTransaction(TransactionFrameBasePtr tx, Ab
 		auto& prevAcctReqs = getRequirements(acct);
 
 		for (auto& req : acctReqs.getRequiredAssets()) {
-			prevAcctReqs.addAssetRequirement(req.first, req.second);
+			prevAcctReqs.addAssetRequirement(req.first, *req.second);
 		}
 	}
 
@@ -97,6 +100,7 @@ TxSetCommutativityRequirements::tryAddTransaction(TransactionFrameBasePtr tx, Ab
 	return true;
 }
 
+//Just checks that commutative txs actually can compute asset requirements
 bool
 TxSetCommutativityRequirements::validateAndAddTransaction(TransactionFrameBasePtr tx, AbstractLedgerTxn& ltx) {
 	AccountID sourceAccount = tx->getSourceID();
@@ -108,11 +112,9 @@ TxSetCommutativityRequirements::validateAndAddTransaction(TransactionFrameBasePt
 	}
 
 	if (tx -> isCommutativeTransaction()) {
-		std::printf("doing req add\n");
 		for (auto const& [acct, acctReqs] : reqs -> getRequirements()) {
 			auto& prevAcctReqs = getRequirements(acct);
 			for (auto const& req : acctReqs.getRequiredAssets()) {
-				std::printf("add req %lu\n", req.second);
 				prevAcctReqs.addAssetRequirement(req.first, req.second);
 			}
 		}
@@ -160,7 +162,8 @@ TxSetCommutativityRequirements::tryReplaceTransaction(TransactionFrameBasePtr ne
 			{
 				for (auto const& [asset, amount] : oldAcctReqs.getRequiredAssets())
 				{
-					newReqs->addAssetRequirement(acct, asset, -amount);
+					//oldAcctReqs should be always valid, so never nullopt
+					newReqs->addAssetRequirement(acct, asset, -*amount);
 				}
 			}
 		}
@@ -168,7 +171,10 @@ TxSetCommutativityRequirements::tryReplaceTransaction(TransactionFrameBasePtr ne
 		{
 			auto& prevAcctReqs = getRequirements(acct);
 			for (auto const& [asset, amount] : newAcctReqs.getRequiredAssets()) {
-				if (!prevAcctReqs.checkAvailableBalanceSufficesForNewRequirement(header, ltx, asset, amount)) {
+				if (!amount) {
+					return false;
+				}
+				if (!prevAcctReqs.checkAvailableBalanceSufficesForNewRequirement(header, ltx, asset, *amount)) {
 					return false;
 				}
 			}

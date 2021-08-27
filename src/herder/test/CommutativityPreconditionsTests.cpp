@@ -14,6 +14,9 @@
 #include "transactions/TransactionFrame.h"
 #include "transactions/TransactionUtils.h"
 
+#include "ledger/LedgerTxn.h"
+#include "ledger/TrustLineWrapper.h"
+
 using namespace stellar;
 using namespace stellar::txtest;
 
@@ -32,7 +35,7 @@ TEST_CASE("commutative payment tx set", "[txset][commutativity]")
 
     auto baseTxFee = app -> getLedgerManager().getLastTxFee();
 
-    SECTION("xlm success")
+    SECTION("xlm only tests")
     {
     	auto senderReqs = 50 * baseTxFee;
 
@@ -62,7 +65,6 @@ TEST_CASE("commutative payment tx set", "[txset][commutativity]")
        	}
        	SECTION("too much xlm spend")
        	{
-
        		for (size_t i = 0; i < 50; i++) {
        			auto tx = paymentSource.commutativeTx({payment(paymentReceiver, 100)});
        			txSet ->add(tx);
@@ -76,5 +78,187 @@ TEST_CASE("commutative payment tx set", "[txset][commutativity]")
        		auto trimmed = txSet->trimInvalid(*app, 0, 0);
        		REQUIRE(trimmed.size() == 51);
        	}
+       	SECTION("only commutative txs get preconditions")
+       	{
+   			auto tx = paymentSource.commutativeTx({payment(paymentReceiver, 10000)});
+   			txSet ->add(tx);
+   			tx = paymentSource.tx({payment(paymentReceiver, 100000)});
+   			txSet->add(tx);
+
+   			txSet -> sortForHash();
+   			REQUIRE(txSet-> checkValid(*app, 0, 0));
+       	}
+    }
+}
+
+/*
+
+Attempt to overflow int64_t when checking validity of txset
+
+*/
+
+TEST_CASE("asset issuance limits", "[herder][txset][commutativity]")
+{
+	Config cfg(getTestConfig());
+	cfg.LEDGER_PROTOCOL_VERSION = 17;
+	cfg.TESTING_UPGRADE_MAX_TX_SET_SIZE = 100;
+
+    VirtualClock clock;
+    Application::pointer app = createTestApplication(clock, cfg);
+
+    auto root = TestAccount::createRoot(*app);
+
+    const int64_t minBalance0 = app->getLedgerManager().getLastMinBalance(0);
+
+    auto baseTxFee = app -> getLedgerManager().getLastTxFee();
+
+    auto feedTx = [&](TransactionFramePtr& tx) {
+        REQUIRE(app->getHerder().recvTransaction(tx) ==
+                TransactionQueue::AddResult::ADD_STATUS_PENDING);
+    };
+
+    auto waitForExternalize = [&]() {
+        bool stop = false;
+        auto prev = app->getLedgerManager().getLastClosedLedgerNum();
+        VirtualTimer checkTimer(*app);
+
+        auto check = [&](asio::error_code const& error) {
+            REQUIRE(!error);
+            REQUIRE(app->getLedgerManager().getLastClosedLedgerNum() >
+                    prev);
+            stop = true;
+        };
+
+        checkTimer.expires_from_now(
+            Herder::EXP_LEDGER_TIMESPAN_SECONDS +
+            std::chrono::seconds(1));
+        checkTimer.async_wait(check);
+        while (!stop)
+        {
+            app->getClock().crank(true);
+        }
+    };
+
+	TxSetFramePtr txSet = std::make_shared<TxSetFrame>(
+		app->getLedgerManager().getLastClosedLedgerHeader().hash);
+
+    SECTION("create asset issuance limit")
+    {
+    	auto issuer = root.create("issuer", 100000 + minBalance0);
+    	issuer.setAssetIssuanceLimited();
+
+    	auto asset = issuer.asset("ABCD");
+
+
+    	SECTION("proper trustlines for users")
+    	{
+
+	    	std::vector<TestAccount> receiverAccounts;
+	    	for (auto i = 0u; i < 10u; i++) {
+	    		receiverAccounts.push_back(root.create(fmt::format("receiver{}", i), app -> getLedgerManager().getLastMinBalance(2)));
+	    		receiverAccounts.back().changeTrust(asset, INT64_MAX);
+	    	}
+
+	    	SECTION("can receive asset")
+	    	{
+	    		for (auto& acct : receiverAccounts) {
+	    			auto tx = issuer.commutativeTx({payment(acct, asset, 10000)});
+	    			txSet -> add(tx);
+	    		}
+	    		txSet -> sortForHash();
+	    		REQUIRE(txSet -> checkValid(*app, 0, 0));
+	    	}
+
+	    	SECTION("can send asset")
+	    	{
+	    		for (auto& acct : receiverAccounts) {
+	    			issuer.pay(acct, asset, 10000);
+	    			auto tx = acct.commutativeTx({payment(issuer, asset, 10000)});
+	    			txSet -> add(tx);
+	    		}
+	    		txSet -> sortForHash();
+	    		REQUIRE(txSet -> checkValid(*app, 0, 0));
+	    	}
+    	}
+    	SECTION("misconfigured trustlines")
+    	{
+    		auto badTrustlineAcct = root.create("badAccount", app -> getLedgerManager().getLastMinBalance(2));
+
+    		SECTION("can't receive with no trustline")
+    		{
+    			txSet -> add(issuer.commutativeTx({payment(badTrustlineAcct, asset, 100)}));
+    			txSet -> sortForHash();
+    			REQUIRE(!txSet -> checkValid(*app, 0, 0));
+    		}
+
+    		badTrustlineAcct.changeTrust(asset, 1000);
+
+    		SECTION("can't receive in commutative section")
+    		{
+    			txSet -> add(issuer.commutativeTx({payment(badTrustlineAcct, asset, 100)}));
+    			txSet -> sortForHash();
+    			REQUIRE(!txSet -> checkValid(*app, 0, 0));
+    		}
+    		SECTION("can receive in noncommutative section")
+    		{
+    			txSet -> add(issuer.tx({payment(badTrustlineAcct, asset, 100)}));
+    			txSet -> sortForHash();
+    			REQUIRE(txSet -> checkValid(*app, 0, 0));
+    		}
+    	}
+    }
+
+    SECTION("issuance limit tracking", "[txset][commutativitity]")
+    {
+    	auto issuer = root.create("issuer", 100000 + minBalance0);
+    	issuer.setAssetIssuanceLimited();
+
+    	auto asset = issuer.asset("ABCD");
+
+    	auto receiver = root.create("receiver", app -> getLedgerManager().getLastMinBalance(1) + 10000);
+    	receiver.changeTrust(asset, INT64_MAX);
+
+    	SECTION("no payment as yet")
+    	{
+    		LedgerTxn ltx(app->getLedgerTxnRoot());
+
+    		auto trustLine = stellar::loadTrustLine(ltx, receiver, asset);
+    		REQUIRE(!!trustLine);
+    		REQUIRE(trustLine.isCommutativeTxEnabledTrustLine());
+    		REQUIRE(trustLine.getBalance() == 0);
+
+    		auto tlIssuer = stellar::loadTrustLine(ltx, issuer, asset);
+
+    		REQUIRE(!!tlIssuer);
+    		REQUIRE(tlIssuer.isCommutativeTxEnabledTrustLine());
+    		REQUIRE(tlIssuer.getBalance() == INT64_MAX);
+
+    	}
+
+    	const int64_t paymentAmount1 = 100000;
+
+    	issuer.pay(receiver, asset, paymentAmount1);
+
+		SECTION("after payment")
+    	{
+    		LedgerTxn ltx(app->getLedgerTxnRoot());
+    		auto header = ltx.loadHeader();
+
+    		auto trustLine = stellar::loadTrustLine(ltx, issuer, asset);
+    		REQUIRE(!!trustLine);
+    		REQUIRE(trustLine.isCommutativeTxEnabledTrustLine());
+    		REQUIRE(trustLine.getBalance() == INT64_MAX - paymentAmount1);
+
+    		REQUIRE(trustLine.addBalance(header, paymentAmount1));
+
+    		REQUIRE(trustLine.getBalance() == INT64_MAX);
+
+    		int64_t bigTransfer = ((int64_t)1) << 62;
+
+    		REQUIRE(trustLine.addBalance(header, -bigTransfer));
+    		REQUIRE(!trustLine.addBalance(header, -bigTransfer));
+    		REQUIRE(!trustLine.addBalance(header, bigTransfer + 1));
+    		REQUIRE(trustLine.getBalance() == INT64_MAX - bigTransfer);
+    	}
     }
 }

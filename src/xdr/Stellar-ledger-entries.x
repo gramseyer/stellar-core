@@ -129,8 +129,9 @@ enum AccountFlags
 
 // mask for all valid flags
 const MASK_ACCOUNT_FLAGS = 0x7;
-const MASK_ACCOUNT_FLAGS_V17 = 0xF;
-const MASK_ACCOUNT_FLAGS_V99 = 0x1F;
+//TODO note -- this breaks historical catchup, but only because
+// I don't want to go to the trouble of creating a new version
+const MASK_ACCOUNT_FLAGS_V17 = 0x1F;
 
 // maximum number of signers
 const MAX_SIGNERS = 20;
