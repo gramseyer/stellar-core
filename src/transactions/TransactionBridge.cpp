@@ -5,6 +5,7 @@
 #include "transactions/TransactionBridge.h"
 #include "transactions/TransactionFrame.h"
 #include "util/GlobalChecks.h"
+#include "xdr/Stellar-transaction.h"
 
 namespace stellar
 {
@@ -48,6 +49,8 @@ getSignatures(TransactionEnvelope& env)
         return env.v1().signatures;
     case ENVELOPE_TYPE_TX_FEE_BUMP:
         return env.feeBump().signatures;
+    case ENVELOPE_TYPE_TX_COMMUTATIVE:
+        return env.commutativeTx().signatures;
     default:
         abort();
     }
@@ -63,7 +66,15 @@ getSignaturesInner(TransactionEnvelope& env)
     case ENVELOPE_TYPE_TX:
         return env.v1().signatures;
     case ENVELOPE_TYPE_TX_FEE_BUMP:
-        return env.feeBump().tx.innerTx.v1().signatures;
+        switch(env.feeBump().tx.innerTx.type())
+        {
+        case ENVELOPE_TYPE_TX:
+            return env.feeBump().tx.innerTx.v1().signatures;
+        default:
+            abort();
+        }
+    case ENVELOPE_TYPE_TX_COMMUTATIVE:
+        return env.commutativeTx().signatures;
     default:
         abort();
     }
@@ -79,8 +90,15 @@ getOperations(TransactionEnvelope& env)
     case ENVELOPE_TYPE_TX:
         return env.v1().tx.operations;
     case ENVELOPE_TYPE_TX_FEE_BUMP:
-        releaseAssert(env.feeBump().tx.innerTx.type() == ENVELOPE_TYPE_TX);
-        return env.feeBump().tx.innerTx.v1().tx.operations;
+        switch(env.feeBump().tx.innerTx.type())
+        {
+        case ENVELOPE_TYPE_TX:
+            return env.feeBump().tx.innerTx.v1().tx.operations;
+        default:
+            abort();
+        }
+    case ENVELOPE_TYPE_TX_COMMUTATIVE:
+        return env.commutativeTx().tx.operations;
     default:
         abort();
     }
@@ -93,39 +111,84 @@ getSignatures(TransactionFramePtr tx)
     return getSignatures(tx->getEnvelope());
 }
 
+struct SeqNumAccessor {
+    using ReturnT = int64_t;
+
+    template<typename TxType>
+    static ReturnT& get(TxType& tx) {
+        return tx.seqNum;
+    }
+};
+
+struct MemoAccessor {
+    using ReturnT = Memo;
+
+    template<typename TxType>
+    static ReturnT& get(TxType& tx) {
+        return tx.memo;
+    }
+};
+
+struct FeeAccessor {
+    using ReturnT = uint32_t;
+
+    template<typename TxType>
+    static ReturnT& get(TxType& tx) {
+        return tx.fee;
+    }
+};
+
+struct TimeBoundsAccessor {
+    using ReturnT = xdr::pointer<TimeBounds>;
+
+    template<typename TxType>
+    static ReturnT& get(TxType& tx) {
+        return tx.timeBounds;
+    }
+};
+
+template<typename AccessorT>
+typename AccessorT::ReturnT& genericEnvelopeAccess(TransactionEnvelope& env)
+{
+    switch(env.type())
+    {
+    case ENVELOPE_TYPE_TX_V0:
+        return AccessorT::template get<TransactionV0>(env.v0().tx);
+    case ENVELOPE_TYPE_TX:
+        return AccessorT::template get<Transaction>(env.v1().tx);
+    case ENVELOPE_TYPE_TX_COMMUTATIVE:
+        return AccessorT::template get<CommutativeTransaction>(env.commutativeTx().tx);
+    default:
+        abort();
+    }
+}
+
 void
 setSeqNum(TransactionFramePtr tx, int64_t seq)
 {
     auto& env = tx->getEnvelope();
-    int64_t& s = env.type() == ENVELOPE_TYPE_TX_V0 ? env.v0().tx.seqNum
-                                                   : env.v1().tx.seqNum;
-    s = seq;
+    genericEnvelopeAccess<SeqNumAccessor>(env) = seq;
 }
 
 void
 setFee(TransactionFramePtr tx, uint32_t fee)
 {
     auto& env = tx->getEnvelope();
-    uint32_t& f =
-        env.type() == ENVELOPE_TYPE_TX_V0 ? env.v0().tx.fee : env.v1().tx.fee;
-    f = fee;
+    genericEnvelopeAccess<FeeAccessor>(env) = fee;
 }
 
 void
 setMemo(TransactionFramePtr tx, Memo memo)
 {
     auto& env = tx->getEnvelope();
-    Memo& m =
-        env.type() == ENVELOPE_TYPE_TX_V0 ? env.v0().tx.memo : env.v1().tx.memo;
-    m = memo;
+    genericEnvelopeAccess<MemoAccessor>(env) = memo;
 }
 
 void
 setMinTime(TransactionFramePtr tx, TimePoint minTime)
 {
     auto& env = tx->getEnvelope();
-    auto& tb = env.type() == ENVELOPE_TYPE_TX_V0 ? env.v0().tx.timeBounds
-                                                 : env.v1().tx.timeBounds;
+    auto& tb = genericEnvelopeAccess<TimeBoundsAccessor>(env);
     tb.activate().minTime = minTime;
 }
 
@@ -133,8 +196,7 @@ void
 setMaxTime(TransactionFramePtr tx, TimePoint maxTime)
 {
     auto& env = tx->getEnvelope();
-    auto& tb = env.type() == ENVELOPE_TYPE_TX_V0 ? env.v0().tx.timeBounds
-                                                 : env.v1().tx.timeBounds;
+    auto& tb = genericEnvelopeAccess<TimeBoundsAccessor>(env);
     tb.activate().maxTime = maxTime;
 }
 #endif

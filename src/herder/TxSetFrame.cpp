@@ -304,6 +304,7 @@ TxSetFrame::checkOrTrim(Application& app,
                         bool justCheck, uint64_t lowerBoundCloseTimeOffset,
                         uint64_t upperBoundCloseTimeOffset)
 {
+    std::printf("start checkOrTrim\n");
     ZoneScoped;
     LedgerTxn ltx(app.getLedgerTxnRoot());
 
@@ -322,6 +323,7 @@ TxSetFrame::checkOrTrim(Application& app,
             if (!tx->checkValid(ltx, lastSeq, lowerBoundCloseTimeOffset,
                                 upperBoundCloseTimeOffset))
             {
+                std::printf("individual tx failed a validity check\n");
                 if (justCheck)
                 {
                     CLOG_DEBUG(
@@ -331,7 +333,6 @@ TxSetFrame::checkOrTrim(Application& app,
                         hexAbbrev(mPreviousLedgerHash), lastSeq,
                         xdr_to_string(tx->getEnvelope(), "TransactionEnvelope"),
                         tx->getResultCode());
-                    //std::printf("individual tx failed a validity check\n");
                     return false;
                 }
                 while (iter != kv.second.end()) {
@@ -344,8 +345,10 @@ TxSetFrame::checkOrTrim(Application& app,
             else
             {
 
-                if (tx -> isCommutativeTransaction() && foundNoncommutative) {
+                if (tx -> isCommutativeTransaction() && foundNoncommutative) 
+                {
                     
+                    std::printf("wtf\n");
                     if (justCheck) 
                     {
                         CLOG_DEBUG(
@@ -363,6 +366,7 @@ TxSetFrame::checkOrTrim(Application& app,
                 }
 
                 if (!tx -> isCommutativeTransaction()) {
+                    std::printf("found noncommutative\n");
                     foundNoncommutative = true;
                 }
 
@@ -384,6 +388,7 @@ TxSetFrame::checkOrTrim(Application& app,
                 if (res) {
                     ++iter;
                 } else {
+                    std::printf("validateandAddTransaction failed\n");
                     if (justCheck) {
                         CLOG_DEBUG(
                             Herder,
@@ -413,6 +418,7 @@ TxSetFrame::checkOrTrim(Application& app,
             for (auto acct : relevantAccounts) {
                 //TODO cache results of this check
                 if (!reqs.checkAccountHasSufficientBalance(acct, ltx, header)) {
+                    std::printf("insufficient balance?\n");
                     if (justCheck) {
                         CLOG_DEBUG(
                             Herder,

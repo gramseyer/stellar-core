@@ -32,6 +32,12 @@ public:
 
 	AccountCommutativityRequirements(AccountID source) : mSourceAccount(source) {}
 
+	AccountCommutativityRequirements(AccountCommutativityRequirements const& other) = delete;
+	AccountCommutativityRequirements& operator=(AccountCommutativityRequirements const& other) = delete;
+
+	AccountCommutativityRequirements(AccountCommutativityRequirements&& other) = default;
+	AccountCommutativityRequirements& operator=(AccountCommutativityRequirements&& other) = default;
+
 	bool checkTrustLine(AbstractLedgerTxn& ltx, Asset asset) const;
 
 	//implicitly checks trustline

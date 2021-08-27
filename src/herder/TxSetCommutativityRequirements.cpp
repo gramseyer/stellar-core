@@ -44,6 +44,7 @@ TxSetCommutativityRequirements::canAddFee(LedgerTxnHeader& header, AbstractLedge
 void 
 TxSetCommutativityRequirements::addFee(AccountID feeAccount, int64_t fee) 
 {
+	std::printf("adding fee %d\n", fee);
 	getRequirements(feeAccount).addAssetRequirement(getNativeAsset(), fee);
 }
 
@@ -67,7 +68,7 @@ TxSetCommutativityRequirements::tryAddTransaction(TransactionFrameBasePtr tx, Ab
 	}
 
 	for (auto const& [acct, acctReqs] : reqs->getRequirements()) {
-		auto prevAcctReqs = getRequirements(acct);
+		auto& prevAcctReqs = getRequirements(acct);
 
 		for (auto& req : acctReqs.getRequiredAssets()) {
 			if (!prevAcctReqs.checkAvailableBalanceSufficesForNewRequirement(header, ltx, req.first, req.second))
@@ -84,7 +85,7 @@ TxSetCommutativityRequirements::tryAddTransaction(TransactionFrameBasePtr tx, Ab
 
 
 	for (auto const& [acct, acctReqs] : reqs -> getRequirements()) {
-		auto prevAcctReqs = getRequirements(acct);
+		auto& prevAcctReqs = getRequirements(acct);
 
 		for (auto& req : acctReqs.getRequiredAssets()) {
 			prevAcctReqs.addAssetRequirement(req.first, req.second);
@@ -107,9 +108,11 @@ TxSetCommutativityRequirements::validateAndAddTransaction(TransactionFrameBasePt
 	}
 
 	if (tx -> isCommutativeTransaction()) {
+		std::printf("doing req add\n");
 		for (auto const& [acct, acctReqs] : reqs -> getRequirements()) {
-			auto prevAcctReqs = getRequirements(acct);
+			auto& prevAcctReqs = getRequirements(acct);
 			for (auto const& req : acctReqs.getRequiredAssets()) {
+				std::printf("add req %lu\n", req.second);
 				prevAcctReqs.addAssetRequirement(req.first, req.second);
 			}
 		}

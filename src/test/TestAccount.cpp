@@ -326,6 +326,14 @@ TestAccount::setOptions(SetOptionsArguments const& arguments)
 }
 
 void
+TestAccount::setAssetIssuanceLimited()
+{
+    auto options = txtest::SetOptionsArguments{};
+    options.setFlags = AUTH_ISSUANCE_LIMIT;
+    setOptions(options);
+}
+
+void
 TestAccount::manageData(std::string const& name, DataValue* value)
 {
     applyTx(tx({txtest::manageData(name, value)}), mApp);

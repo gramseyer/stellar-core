@@ -70,6 +70,8 @@ class TestAccount
 
     void setOptions(txtest::SetOptionsArguments const& arguments);
 
+    void setAssetIssuanceLimited();
+
     void manageData(std::string const& name, DataValue* value);
 
     void bumpSequence(SequenceNumber to);

@@ -19,7 +19,7 @@ namespace stellar
 
 static const uint32 allAccountAuthFlags =
     (AUTH_REQUIRED_FLAG | AUTH_REVOCABLE_FLAG | AUTH_IMMUTABLE_FLAG |
-     AUTH_CLAWBACK_ENABLED_FLAG);
+     AUTH_CLAWBACK_ENABLED_FLAG | AUTH_ISSUANCE_LIMIT);
 
 SetOptionsOpFrame::SetOptionsOpFrame(Operation const& op, OperationResult& res,
                                      TransactionFrame& parentTx)
@@ -123,6 +123,11 @@ bool
 SetOptionsOpFrame::doApply(AbstractLedgerTxn& ltx)
 {
     ZoneNamedN(applyZone, "SetOptionsOp apply", true);
+
+    // Obviously insufficient to not check anything at all when enabling issuance limit.
+    // Probably ideal way is to have it on by default when creating new account,
+    // and make that the only way of turning it on?  Of course, this is irrelevant
+    // if we do (the right thing) the asset issuer trustlines.
 
     auto header = ltx.loadHeader();
     auto sourceAccount = loadSourceAccount(ltx, header);

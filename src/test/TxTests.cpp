@@ -599,7 +599,7 @@ TransactionFramePtr commutativeTxFromOperations(Application& app,
                             & UINT32_MAX);
     e.commutativeTx().tx.seqNum = seq;
     std::copy(std::begin(ops), std::end(ops),
-              std::back_inserter(e.v1().tx.operations));
+              std::back_inserter(e.commutativeTx().tx.operations));
 
     auto res = std::static_pointer_cast<TransactionFrame>(
         TransactionFrameBase::makeTransactionFromWire(app.getNetworkID(), e));

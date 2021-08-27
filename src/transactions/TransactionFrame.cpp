@@ -79,10 +79,15 @@ TransactionFrame::getContentsHash() const
             mContentsHash = sha256(xdr::xdr_to_opaque(
                 mNetworkID, ENVELOPE_TYPE_TX, 0, mEnvelope.v0().tx));
         }
-        else
+        else if (mEnvelope.type() == ENVELOPE_TYPE_TX)
         {
             mContentsHash = sha256(xdr::xdr_to_opaque(
                 mNetworkID, ENVELOPE_TYPE_TX, mEnvelope.v1().tx));
+        } 
+        else
+        {
+            mContentsHash = sha256(xdr::xdr_to_opaque(
+                mNetworkID, ENVELOPE_TYPE_TX_COMMUTATIVE, mEnvelope.commutativeTx().tx));
         }
     }
 #ifdef _DEBUG

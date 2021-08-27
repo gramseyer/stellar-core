@@ -740,6 +740,7 @@ getAvailableBalance(LedgerHeader const& header, LedgerEntry const& le)
     if (le.data.type() == ACCOUNT)
     {
         auto const& acc = le.data.account();
+        std::printf("getMinBalance acc.Balance %lu getMinBalance %lu\n", acc.balance, getMinBalance(header, acc));
         avail = acc.balance - getMinBalance(header, acc);
     }
     else if (le.data.type() == TRUSTLINE)
@@ -757,6 +758,7 @@ getAvailableBalance(LedgerHeader const& header, LedgerEntry const& le)
 
     if (header.ledgerVersion >= 10)
     {
+        std::printf("selling liabilities was %lu\n", getSellingLiabilities(header, le));
         avail -= getSellingLiabilities(header, le);
     }
     return avail;

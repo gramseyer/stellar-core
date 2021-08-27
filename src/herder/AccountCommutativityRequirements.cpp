@@ -1,6 +1,7 @@
 #include "herder/AccountCommutativityRequirements.h"
 #include "transactions/TransactionUtils.h"
 #include "ledger/TrustLineWrapper.h"
+#include "util/types.h"
 
 namespace stellar
 {
@@ -68,6 +69,7 @@ void
 AccountCommutativityRequirements::addAssetRequirement(
 	Asset asset, int64_t amount)
 {
+	std::printf("adding requirement %s %lu prev was %lu\n", assetToString(asset).c_str(), amount, mRequiredAssets[asset]);
 	mRequiredAssets[asset] += amount;
 }
 
@@ -114,8 +116,9 @@ AccountCommutativityRequirements::checkAccountHasSufficientBalance(AbstractLedge
 			//std::printf("trustline fail\n");
 			return false;
 		}
+		std::printf("requirement: %ld currentBalance %ld\n", amount, getAvailableBalance(header, ltx, mSourceAccount, asset));
+
 		if (amount > getAvailableBalance(header, ltx, mSourceAccount, asset)) {
-			//std::printf("requirement: %ld currentBalance %ld\n", amount, getAvailableBalance(header, ltx, mSourceAccount, asset));
 
 			return false;
 		}
