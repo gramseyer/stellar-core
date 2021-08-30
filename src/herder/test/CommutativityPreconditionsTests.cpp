@@ -92,10 +92,64 @@ TEST_CASE("commutative payment tx set", "[txset][commutativity]")
 }
 
 /*
-
 Attempt to overflow int64_t when checking validity of txset
-
 */
+TEST_CASE("txset requirements overflows")
+{
+	Config cfg(getTestConfig());
+	cfg.LEDGER_PROTOCOL_VERSION = 17;
+	cfg.TESTING_UPGRADE_MAX_TX_SET_SIZE = 100;
+
+    VirtualClock clock;
+    Application::pointer app = createTestApplication(clock, cfg);
+
+    auto root = TestAccount::createRoot(*app);
+
+    const int64_t minBalance2 = app->getLedgerManager().getLastMinBalance(2);
+
+    auto baseTxFee = app -> getLedgerManager().getLastTxFee();
+	TxSetFramePtr txSet = std::make_shared<TxSetFrame>(
+		app->getLedgerManager().getLastClosedLedgerHeader().hash);
+
+    auto issuer = root.create("issuer", 100000 + minBalance2);
+    issuer.setAssetIssuanceLimited();
+
+    auto asset = issuer.asset("ABCD");
+
+    auto main_participant = root.create("main participant", 1000000 + minBalance2);
+    main_participant.changeTrust(asset, INT64_MAX);
+
+    auto receiver = root.create("receiver", 1000000 + minBalance2);
+    receiver.changeTrust(asset, INT64_MAX);
+    issuer.pay(main_participant, asset, 1000);
+    SECTION("null hypothesis: int64max is valid")
+    {
+    	issuer.pay(main_participant, asset, INT64_MAX - 1000);
+    	auto tx = main_participant.commutativeTx({payment(receiver, asset, INT64_MAX - 100), payment(receiver, asset, 100)});
+    	txSet -> add(tx);
+    	txSet -> sortForHash();
+    	REQUIRE(txSet -> checkValid(*app, 0, 0));
+    }
+
+    SECTION("overflow one tx requirements")
+    {
+    	auto tx = main_participant.commutativeTx({payment(receiver, asset, INT64_MAX), payment(receiver, asset, 100)});
+    	txSet -> add(tx);
+    	txSet -> sortForHash();
+    	REQUIRE(!txSet -> checkValid(*app, 0, 0));
+    }
+
+    SECTION("overflow via multiple tx")
+    {
+    	txSet -> add(
+    		main_participant.commutativeTx({payment(receiver, asset, INT64_MAX)}));
+    	txSet -> add(
+    		main_participant.commutativeTx({payment(receiver, asset, 1000)}));
+    	txSet -> sortForHash();
+    	REQUIRE(!txSet -> checkValid(*app, 0, 0));
+    }
+}
+
 
 TEST_CASE("asset issuance limits", "[herder][txset][commutativity]")
 {

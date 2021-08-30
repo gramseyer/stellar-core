@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util/UnorderedMap.h"
+#include "util/UnorderedSet.h"
 #include "util/XDROperators.h"
 #include "ledger/AssetPair.h"
 
@@ -8,6 +9,8 @@
 
 #include <cstdint>
 #include <vector>
+
+
 
 namespace stellar {
 
@@ -21,14 +24,39 @@ class TradeMaximizingSolver {
 
 	std::vector<Row> mCoefficients;
 
-	UnorderedMap<Asset, size_t> mIndexMap;
-	UnorderedMap<AssetPair, size_t, AssetPairHash> mAssetPairToRowMap;
+	using row_idx_t = size_t;
+	using col_idx_t = size_t;
+
+	UnorderedMap<Asset, size_t> mIndexMap; // asset to number
+	//UnorderedMap<size_t, Asset> mReverseIndexMap;  // number to asset
+
+	UnorderedMap<AssetPair, row_idx_t, AssetPairHash> mAssetPairToRowMap;
+
+	std::vector<bool> mActiveYijs;
+
+	//UnorderedSet<size_t> mActiveYijs;
+
+	UnorderedMap<std::pair<size_t, size_t>, int128_t> mSolutionMap;
+
+	UnorderedMap<row_idx_t, col_idx_t> mActiveBasis;
+
+	bool mSolved;
+
+	void throwIfSolved() const;
+	void throwIfUnsolved() const;
+
 	size_t indexPairToVarIndex(size_t sell, size_t buy) const;
+	//returns nullopt if not yij index
+	std::optional<std::pair<size_t, size_t>> varIndexToIndexPair(size_t yijIdx) const;
+
 	size_t assetPairToVarIndex(AssetPair assetPair) const;
 
 	size_t assetToVarIndex(Asset asset) const;
 
 	size_t numVars() const;
+
+	size_t numYijEijVars() const;
+	size_t numYijVars() const;
 
 	std::optional<size_t>
 	getNextPivotIndex() const;
@@ -44,13 +72,25 @@ class TradeMaximizingSolver {
 	void
 	multiplyRow(size_t rowIdx, int8_t coefficient);
 
+	bool isBasisCol(size_t colIdx) const;
+
+	void constructSolution();
+
+	void printRow(size_t idx) const;
+	void printTableau() const;
+
 public:
 
 	TradeMaximizingSolver(std::vector<Asset> assets);
 
+	TradeMaximizingSolver(const TradeMaximizingSolver&) = delete;
+	TradeMaximizingSolver& operator=(const TradeMaximizingSolver&) = delete;
+
 	void setUpperBound(AssetPair assetPair, int128_t upperBound);
 
 	void doSolve();
+
+	int128_t getRowResult(AssetPair assetPair) const;
 
 };
 
