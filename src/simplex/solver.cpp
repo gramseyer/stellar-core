@@ -391,4 +391,19 @@ TradeMaximizingSolver::constructSolution()
 	}
 }
 
+void
+TradeMaximizingSolver::printSolution() const
+{
+	for (size_t i = 0; i < mNumAssets; i++)
+	{
+		for (size_t j = 0; j < mNumAssets; j++) 
+		{
+			if (i != j)
+			{
+				std::printf("%lu %lu %lf\n", i, j, (double) mSolutionMap.at({i, j}));
+			}
+		}
+	}
+}
+
 } /* stellar */

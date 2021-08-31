@@ -92,6 +92,8 @@ public:
 
 	int128_t getRowResult(AssetPair assetPair) const;
 
+	void printSolution() const;
+
 };
 
 } /* stellar */
