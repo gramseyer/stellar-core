@@ -17,6 +17,7 @@ class IOCOrderbookManager {
 	UnorderedMap<AssetPair, IOCOrderbook, AssetPairHash> mOrderbooks;
 
 	bool mSealed;
+	bool mTatonnementStatsPrecomputed;
 
 	void clearOrderbook(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target);
 
@@ -28,11 +29,11 @@ class IOCOrderbookManager {
 
 	void returnToSource(AbstractLedgerTxn& ltx, Asset asset, int64_t amount);
 
-
+	void doPriceComputationPreprocessing();
 
 public:
 
-	IOCOrderbookManager() : mSealed(false) {}
+	IOCOrderbookManager() : mSealed(false), mTatonnementStatsPrecomputed(false) {}
 
 	void addOffer(AssetPair assetPair, const IOCOffer& offer);
 
@@ -45,6 +46,7 @@ public:
 	void clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& batchSolution);
 
 	size_t numOpenOrderbooks() const;
+
 
 };
 

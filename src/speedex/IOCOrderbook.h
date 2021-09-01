@@ -17,9 +17,18 @@ struct IOCOrderbookClearingParams {
 	int64_t totalSellAmount;
 };
 
+constexpr static Price zeroPrice() {
+	Price p;
+	p.n = 0;
+	p.d = 1;
+	return p;
+}
+
 class AbstractLedgerTxn;
 
 class IOCOrderbook {
+
+public:
 
 	using int128_t = __int128_t;
 
@@ -32,6 +41,15 @@ class IOCOrderbook {
 		constexpr static int OFFERED_TIMES_PRICE_RADIX = 32;
 	};
 
+private:
+
+	constexpr static PriceCompStats zeroStats = PriceCompStats
+	{
+		.marginalPrice = zeroPrice(), 
+		.cumulativeOfferedForSale = 0,
+		.cumulativeOfferedForSaleTimesPrice = 0
+	};
+
 	const AssetPair mTradingPair;
 	std::set<IOCOffer> mOffers; // sorted by IOCOffer::operator<=>
 
@@ -42,10 +60,16 @@ class IOCOrderbook {
 	void throwIfCleared();
 	void throwIfNotCleared();
 
+
+
+
 public:
 	IOCOrderbook(AssetPair tradingPair);
 
 	void doPriceComputationPreprocessing();
+
+	//visible for testing
+	PriceCompStats getPriceCompStats(uint64_t sellPrice, uint64_t buyPrice) const;
 
 	void addOffer(IOCOffer offer);
 
@@ -54,6 +78,8 @@ public:
 	void clearOffers(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target, LiquidityPoolFrame& lpFrame);
 
 	void finish(AbstractLedgerTxn& ltx);
+
+	int128_t cumulativeOfferedForSaleTimesPrice(uint64_t sellPrice, uint64_t buyPrice, uint8_t taxRate, uint8_t smoothMult) const;
 };
 
 

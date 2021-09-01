@@ -26,7 +26,7 @@ static void checkSimplexAmount(Asset const& sell, Asset const& buy, TradeMaximiz
 		.selling = sell,
 		.buying = buy
 	};
-	std::printf("get %lf expect %lf\n", (double) solver.getRowResult(tradingPair), (double) amount);
+	//std::printf("get %lf expect %lf\n", (double) solver.getRowResult(tradingPair), (double) amount);
 	REQUIRE(solver.getRowResult(tradingPair) == amount);
 }
 
@@ -91,14 +91,11 @@ TEST_CASE("simplex no trades", "[simplex]")
 			if (i != j) {
 				auto& assetA = assets[i];
 				auto& assetB = assets[j];
-				std::printf("bar %lu %lu\n", i, j);
 				AssetPair tradingPair{
 					.selling = assetA,
 					.buying = assetB
 				};
 				REQUIRE(solver.getRowResult(tradingPair) == 0);
-			} else {
-				std::printf("foo\n");
 			}
 		}
 	}
@@ -215,7 +212,6 @@ TEST_CASE("simplex 3 asset", "[simplex]")
 		setSimplexAmount(assets[2], assets[1], solver, 450);
 		
 		solver.doSolve();
-		solver.printSolution();
 
 		/*checkSimplexAmount(assets[0], assets[1], solver, 100);
 		checkSimplexAmount(assets[1], assets[0], solver, 400);
@@ -236,7 +232,6 @@ TEST_CASE("simplex 3 asset", "[simplex]")
 		setSimplexAmount(assets[2], assets[1], solver, 100);
 
 		solver.doSolve();
-		solver.printSolution();
 		checkAllAssetConstraints(solver, assets);
 		checkObjective(solver, assets, 500);
 

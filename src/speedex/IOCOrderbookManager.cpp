@@ -23,6 +23,15 @@ IOCOrderbookManager::throwIfNotSealed() const {
 	}
 }
 
+void
+IOCOrderbookManager::doPriceComputationPreprocessing() {
+	for (auto & [_, orderbook] : mOrderbooks)
+	{
+		orderbook.doPriceComputationPreprocessing();
+	}
+	mTatonnementStatsPrecomputed = true;
+}
+
 
 IOCOrderbook&
 IOCOrderbookManager::getOrCreateOrderbook(AssetPair assetPair) {

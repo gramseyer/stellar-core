@@ -20,6 +20,8 @@ template <> class hash<std::pair<size_t, size_t>>
 
 namespace stellar {
 
+constexpr static bool debugPrints = false;
+
 
 size_t
 TradeMaximizingSolver::numVars() const {
@@ -71,6 +73,7 @@ TradeMaximizingSolver::printRow(size_t rowIdx) const {
 void
 TradeMaximizingSolver::printTableau() const
 {
+	if (!debugPrints) return;
 	for (size_t i = 0; i < mCoefficients.size(); i++) {
 		printRow(i);
 	}
@@ -140,7 +143,8 @@ TradeMaximizingSolver::TradeMaximizingSolver(std::vector<Asset> assets)
 
 	mActiveYijs.resize(numYijVars(), false);
 
-	std::printf("start tableau:\n");
+	if (debugPrints)
+		std::printf("start tableau:\n");
 	printTableau();
 }
 
@@ -178,17 +182,14 @@ TradeMaximizingSolver::setUpperBound(AssetPair assetPair, int128_t upperBound)
 	row.first[eIdx] = 1;
 	row.second = upperBound;
 
-	//std::printf("%lf\n", (double) upperBound);
-
 	mActiveBasis[rowIdx] = eIdx;
 	mActiveYijs[yIdx] = true;
 
 	auto& objectiveRow = mCoefficients.front();
 	objectiveRow.first[yIdx] = 1;
 
-	//printRow(mCoefficients.size() -1 );
-
-	std::printf("post add tableau:\n");
+	if (debugPrints)
+		std::printf("post add tableau:\n");
 	printTableau();
 }
 
@@ -209,9 +210,11 @@ TradeMaximizingSolver::getNextPivotConstraint(size_t pivotColumn) const {
 	bool foundValue = false;
 	int128_t minValue = 0;
 	for (size_t i = 1; i < mCoefficients.size(); i++) {
-		std::printf("next pivot check %lu\n", i);
+		if (debugPrints)
+			std::printf("next pivot check %lu\n", i);
 		if (mCoefficients[i].first[pivotColumn] > 0) {
-			std::printf("coeff is positive foundValue = %lu minValue = %lf\n", foundValue, (double) minValue);
+			if (debugPrints)
+				std::printf("coeff is positive foundValue = %lu minValue = %lf\n", foundValue, (double) minValue);
 			if ((!foundValue) || minValue > mCoefficients[i].second) {
 				foundValue = true;
 				minIdx = i;
@@ -227,7 +230,8 @@ TradeMaximizingSolver::getNextPivotConstraint(size_t pivotColumn) const {
 
 bool
 TradeMaximizingSolver::doPivot() {
-	std::printf("doing pivot\n");
+	if (debugPrints)
+		std::printf("doing pivot\n");
 	printTableau();
 	auto nextPivotIdx = getNextPivotIndex();
 	if (!nextPivotIdx) {
@@ -240,9 +244,11 @@ TradeMaximizingSolver::doPivot() {
 		throw std::runtime_error("matrix should be totally unimodular!");
 	}
 
-	std::printf("pivot col %lu pivot row %lu coeff %d\n", *nextPivotIdx, nextPivotConstraint, coeff);
+	if (debugPrints)
+		std::printf("pivot col %lu pivot row %lu coeff %d\n", *nextPivotIdx, nextPivotConstraint, coeff);
 	multiplyRow(nextPivotConstraint, coeff);
-	std::printf("post mult\n");
+	if (debugPrints)
+		std::printf("post mult\n");
 	printTableau();
 	for (size_t i = 0; i < mCoefficients.size(); i++) {
 		if (i != nextPivotConstraint) {
@@ -261,9 +267,13 @@ void
 TradeMaximizingSolver::addRowToRow(size_t rowToAddIdx, size_t rowToBeAddedToIdx, int8_t coefficient) {
 	auto& rowToAdd = mCoefficients[rowToAddIdx];
 	auto& rowToBeAddedTo = mCoefficients[rowToBeAddedToIdx];
+	const auto sz = rowToAdd.first.size();
 
-	for (size_t i = 0; i < rowToAdd.first.size(); i++) {
-		rowToBeAddedTo.first[i] += rowToAdd.first[i] * coefficient;
+	auto* rowToBeAddedToPtr = rowToBeAddedTo.first.data();
+	auto* rowToAddPtr = rowToAdd.first.data();
+
+	for (size_t i = 0; i < sz; i++) {
+		rowToBeAddedToPtr[i] += rowToAddPtr[i] * coefficient;
 	}
 	rowToBeAddedTo.second += rowToAdd.second * coefficient;
 }
@@ -273,8 +283,12 @@ TradeMaximizingSolver::multiplyRow(size_t rowIdx, int8_t coefficient) {
 	if (coefficient == 1) return;
 	auto& row = mCoefficients[rowIdx];
 
-	for (size_t i = 0; i < row.first.size(); i++) {
-		row.first[i] *= coefficient;
+	const auto sz = row.first.size();
+
+	auto* rowPtr = row.first.data();
+
+	for (size_t i = 0; i < sz; i++) {
+		rowPtr[i] *= coefficient;
 	}
 	row.second *= coefficient;
 }
@@ -283,7 +297,8 @@ TradeMaximizingSolver::int128_t
 TradeMaximizingSolver::getRowResult(AssetPair assetPair) const {
 	throwIfUnsolved();
 	auto pair = std::make_pair(mIndexMap.at(assetPair.selling), mIndexMap.at(assetPair.buying));
-	std::printf("query for pair %lu %lu\n", pair.first, pair.second);
+	if (debugPrints)
+		std::printf("query for pair %lu %lu\n", pair.first, pair.second);
 	return mSolutionMap.at(pair);
 }
 
@@ -309,7 +324,8 @@ TradeMaximizingSolver::constructSolution()
 			solvedYijs[yij] = true;
 			auto indexPair = *varIndexToIndexPair(yij);
 			mSolutionMap[indexPair] = 0;
-			std::printf("adding yij=0 to solution bc no upper bd set idx %lu (%lu %lu) \n", yij, indexPair.first, indexPair.second);
+			if (debugPrints)
+				std::printf("adding yij=0 to solution bc no upper bd set idx %lu (%lu %lu) \n", yij, indexPair.first, indexPair.second);
 		}
 		else if (!solvedYijs[yij])
 		{

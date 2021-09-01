@@ -4,7 +4,10 @@
 
 namespace stellar {
 
-IOCOrderbook::IOCOrderbook(AssetPair tradingPair) : mTradingPair(tradingPair) {};
+IOCOrderbook::IOCOrderbook(AssetPair tradingPair) 
+	: mTradingPair(tradingPair)
+	, mCleared(false)
+	{};
 
 
 void
@@ -21,18 +24,32 @@ IOCOrderbook::throwIfNotCleared() {
 	}
 }
 
+bool
+priceNEQ(Price const& p1, Price const& p2)
+{
+	return ((uint64_t)p1.n) * ((uint64_t) p2.d) != ((uint64_t)p1.d) * ((uint64_t) p2.n);
+}
+
 void 
 IOCOrderbook::doPriceComputationPreprocessing() {
-	PriceCompStats stats;
+	std::printf("preprocess\n");
+	PriceCompStats stats = zeroStats;
+	mPrecomputedTatonnementData.clear();
 	for (auto& offer : mOffers) {
-		mPrecomputedTatonnementData.push_back(stats); // intentionally starting with 0
+		//intentionally starting with 0 at bot
+		if (priceNEQ(offer.mMinPrice, stats.marginalPrice))
+		{
+			std::printf("adding (%d / %d) %lld\n", stats.marginalPrice.n, stats.marginalPrice.d, stats.cumulativeOfferedForSale);
+			mPrecomputedTatonnementData.push_back(stats);
+		}
 		stats.marginalPrice = offer.mMinPrice;
 		stats.cumulativeOfferedForSale += offer.mSellAmount;
 
-		int128_t offerTimesPrice = offer.mSellAmount * offer.mMinPrice.n;
+		int128_t offerTimesPrice = ((int128_t) offer.mSellAmount) * offer.mMinPrice.n;
 		offerTimesPrice <<= PriceCompStats::OFFERED_TIMES_PRICE_RADIX;
 
 		stats.cumulativeOfferedForSaleTimesPrice += offerTimesPrice / offer.mMinPrice.d;
+
 	}
 
 	mPrecomputedTatonnementData.push_back(stats);
@@ -87,6 +104,71 @@ IOCOrderbook::finish(AbstractLedgerTxn& ltx) {
 		mCleared = true;
 	}
 }
+
+bool priceLT(Price const& p, uint64_t sellPrice, uint64_t buyPrice) {
+	using int128_t = __int128_t;
+
+	std::printf("priceLT comparison: sell %lu buy %lu p.n %d p.d %d\n", sellPrice, buyPrice, p.n, p.d);
+
+	// p.n / p.d <? sellPrice / buyPrice
+	return (((int128_t) p.n) * ((int128_t) buyPrice)) < (((int128_t) p.d) * ((int128_t) sellPrice)); 
+}
+
+bool priceLTE(Price const& p, uint64_t sellPrice, uint64_t buyPrice) {
+	using int128_t = __int128_t;
+
+	std::printf("priceLTE comparison: sell %lu buy %lu p.n %d p.d %d\n", sellPrice, buyPrice, p.n, p.d);
+
+
+	// p.n / p.d <=? sellPrice / buyPrice
+	return (((int128_t) p.n) * ((int128_t) buyPrice)) <= (((int128_t) p.d) * ((int128_t) sellPrice)); 
+}
+
+IOCOrderbook::PriceCompStats 
+IOCOrderbook::getPriceCompStats(uint64_t sellPrice, uint64_t buyPrice) const {
+
+
+	for (auto const& stats : mPrecomputedTatonnementData)
+	{
+		std::printf("marginal p (%d / %d) amount %ld\n", stats.marginalPrice.n, stats.marginalPrice.d, stats.cumulativeOfferedForSale);
+	}
+
+	if (mPrecomputedTatonnementData.size() == 1)
+	{
+		return zeroStats;
+	}
+
+	size_t start = 1;
+	size_t end = mPrecomputedTatonnementData.size() - 1;
+
+	if (priceLTE(mPrecomputedTatonnementData[end].marginalPrice, sellPrice, buyPrice))
+	{
+		std::printf("larger than end\n");
+		return mPrecomputedTatonnementData[end];
+	}
+
+	std::printf("start bin search\n");
+
+	while (true) {
+		size_t mid = (start + end) / 2;
+
+
+		std::printf("start = %lu end = %lu mid= %lu \n", start, end, mid);
+
+		if (start == end)
+		{
+			return mPrecomputedTatonnementData[start - 1];
+		}
+
+		if (priceLTE(mPrecomputedTatonnementData[mid].marginalPrice, sellPrice, buyPrice))
+		{
+			start = mid + 1;
+		} else {
+			end = mid;
+		}
+	}
+}
+
 
 
 
