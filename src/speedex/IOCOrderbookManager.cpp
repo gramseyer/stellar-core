@@ -76,6 +76,7 @@ void
 IOCOrderbookManager::sealBatch() {
 	throwIfSealed();
 	mSealed = true;
+	doPriceComputationPreprocessing();
 }
 
 void IOCOrderbookManager::returnToSource(AbstractLedgerTxn& ltx, Asset asset, int64_t amount) {
@@ -129,5 +130,28 @@ IOCOrderbookManager::clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& sol
 	}
 	mOrderbooks.clear();
 }
+
+void 
+IOCOrderbookManager::demandQuery(
+	UnorderedMap<Asset, uint64_t> const& prices, 
+	UnorderedMap<Asset,int128_t>& demandsOut, 
+	uint8_t taxRate, 
+	uint8_t smoothMult) const
+{
+	demandsOut.clear();
+
+	for (auto const& [assetPair, orderbook] : mOrderbooks)
+	{
+		auto sellPrice = prices.at(assetPair.selling);
+		auto buyPrice = prices.at(assetPair.buying);
+
+
+		auto tradeAmount = orderbook.cumulativeOfferedForSaleTimesPrice(sellPrice, buyPrice, smoothMult);
+
+		demandsOut[assetPair.buying] += (tradeAmount - (tradeAmount >> taxRate)); // demand is positive
+		demandsOut[assetPair.selling] -= tradeAmount;
+	}
+}
+
 
 } /* stellar */

@@ -14,6 +14,8 @@ class BatchClearingTarget;
 class OrderbookClearingTarget;
 
 class IOCOrderbookManager {
+	using int128_t = __int128_t;
+
 	UnorderedMap<AssetPair, IOCOrderbook, AssetPairHash> mOrderbooks;
 
 	bool mSealed;
@@ -26,7 +28,7 @@ class IOCOrderbookManager {
 
 	IOCOrderbook&
 	getOrCreateOrderbook(AssetPair assetPair);
-
+ 
 	void returnToSource(AbstractLedgerTxn& ltx, Asset asset, int64_t amount);
 
 	void doPriceComputationPreprocessing();
@@ -46,6 +48,12 @@ public:
 	void clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& batchSolution);
 
 	size_t numOpenOrderbooks() const;
+
+	void demandQuery(
+		UnorderedMap<Asset, uint64_t> const& prices, 
+		UnorderedMap<Asset, int128_t>& demandsOut, 
+		uint8_t taxRate,
+		uint8_t smoothMult) const;
 
 
 };

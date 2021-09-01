@@ -39,6 +39,10 @@ public:
 		int128_t cumulativeOfferedForSaleTimesPrice; // Fractional : Radix 32 bits;
 
 		constexpr static int OFFERED_TIMES_PRICE_RADIX = 32;
+
+		constexpr static int128_t OFFERED_TIMES_PRICE_LOWBITS_MASK
+	 		= 0xFFFFFFFF;
+
 	};
 
 private:
@@ -49,6 +53,7 @@ private:
 		.cumulativeOfferedForSale = 0,
 		.cumulativeOfferedForSaleTimesPrice = 0
 	};
+
 
 	const AssetPair mTradingPair;
 	std::set<IOCOffer> mOffers; // sorted by IOCOffer::operator<=>
@@ -79,7 +84,8 @@ public:
 
 	void finish(AbstractLedgerTxn& ltx);
 
-	int128_t cumulativeOfferedForSaleTimesPrice(uint64_t sellPrice, uint64_t buyPrice, uint8_t taxRate, uint8_t smoothMult) const;
+	// output: radix 32 bits
+	int128_t cumulativeOfferedForSaleTimesPrice(uint64_t sellPrice, uint64_t buyPrice, uint8_t smoothMult) const;
 };
 
 

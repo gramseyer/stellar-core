@@ -29,7 +29,7 @@ genericAssetPair()
 	};
 }
 
-static void addOffer(IOCOrderbook& orderbook, uint32_t p_n, uint32_t p_d, int64_t amount, uint64_t idx)
+static void addOffer(IOCOrderbook& orderbook, int32_t p_n, int32_t p_d, int64_t amount, uint64_t idx)
 {
 	Price p;
 	p.n = p_n;
@@ -99,7 +99,6 @@ TEST_CASE("offers at identical price point", "[speedex]")
 	REQUIRE(orderbook.getPriceCompStats(1, 1).cumulativeOfferedForSale == 4 * amount);
 	REQUIRE(orderbook.getPriceCompStats(1, 1).cumulativeOfferedForSaleTimesPrice == expectedHalfAmount + (((int128_t) (3 * amount)) << 32));
 
-
 	REQUIRE(orderbook.getPriceCompStats(101, 100).cumulativeOfferedForSale == 4 * amount);
 	REQUIRE(orderbook.getPriceCompStats(101, 100).cumulativeOfferedForSaleTimesPrice == expectedHalfAmount + (((int128_t) (3 * amount)) << 32));
 
@@ -114,5 +113,48 @@ TEST_CASE("offers at identical price point", "[speedex]")
 
 	REQUIRE(orderbook.getPriceCompStats(201, 100).cumulativeOfferedForSale == 5 * amount);
 	REQUIRE(orderbook.getPriceCompStats(201, 100).cumulativeOfferedForSaleTimesPrice == expectedHalfAmount + (((int128_t) (5 * amount)) << 32));
+}
+
+TEST_CASE("demand query", "[speedex]")
+{
+	IOCOrderbook orderbook(genericAssetPair());
+
+	int64_t amount = 10000;
+
+	addOffer(orderbook, 300, 100, amount, 1);
+
+	orderbook.doPriceComputationPreprocessing();
+
+	REQUIRE(orderbook.cumulativeOfferedForSaleTimesPrice(299, 100, 2) == 0);
+	REQUIRE(orderbook.cumulativeOfferedForSaleTimesPrice(300, 100, 2) == 0);
+	REQUIRE(orderbook.cumulativeOfferedForSaleTimesPrice(300, 100, 0) == 300 * amount);
+
+	REQUIRE(orderbook.cumulativeOfferedForSaleTimesPrice(400, 100, 0) == 400 * amount);
+	REQUIRE(orderbook.cumulativeOfferedForSaleTimesPrice(400, 100, 2) == 400 * amount);
+	REQUIRE(orderbook.cumulativeOfferedForSaleTimesPrice(400, 100, 1) == 200 * amount);
+}
+
+TEST_CASE("attempt overflow demand query", "[speedex]")
+{
+	IOCOrderbook orderbook(genericAssetPair());
+
+	int64_t amount = INT64_MAX;
+
+	addOffer(orderbook, INT32_MAX, 1, amount, 1);
+
+	orderbook.doPriceComputationPreprocessing();
+
+	auto priceMult = [&] (uint64_t price) {
+		return ((int128_t) amount) * ((int128_t) price);
+	};
+
+
+	REQUIRE(orderbook.cumulativeOfferedForSaleTimesPrice(UINT64_MAX, 1, 0) == priceMult(UINT64_MAX));
+
+	REQUIRE(orderbook.cumulativeOfferedForSaleTimesPrice(UINT64_MAX >> 2, 1, 1) == priceMult(UINT64_MAX >> 2));
+	REQUIRE(orderbook.cumulativeOfferedForSaleTimesPrice(UINT64_MAX >> 3, 1, 1) == priceMult(UINT64_MAX >> 3));
+	REQUIRE(orderbook.cumulativeOfferedForSaleTimesPrice(UINT64_MAX >> 4, 1, 1) == priceMult(UINT64_MAX >> 4));
+
+	REQUIRE(orderbook.cumulativeOfferedForSaleTimesPrice(UINT64_MAX>>2, (UINT64_MAX / INT32_MAX) >> 2, 1) == 0);
 }
 
