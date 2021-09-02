@@ -6,6 +6,7 @@
 #include "speedex/BatchSolution.h"
 
 #include "util/UnorderedMap.h"
+#include <map>
 
 namespace stellar {
 
@@ -19,7 +20,6 @@ class IOCOrderbookManager {
 	UnorderedMap<AssetPair, IOCOrderbook, AssetPairHash> mOrderbooks;
 
 	bool mSealed;
-	bool mTatonnementStatsPrecomputed;
 
 	void clearOrderbook(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target);
 
@@ -27,7 +27,7 @@ class IOCOrderbookManager {
 	void throwIfNotSealed() const;
 
 	IOCOrderbook&
-	getOrCreateOrderbook(AssetPair assetPair);
+	getOrCreateOrderbook(AssetPair const& assetPair);
  
 	void returnToSource(AbstractLedgerTxn& ltx, Asset asset, int64_t amount);
 
@@ -35,9 +35,9 @@ class IOCOrderbookManager {
 
 public:
 
-	IOCOrderbookManager() : mSealed(false), mTatonnementStatsPrecomputed(false) {}
+	IOCOrderbookManager() : mSealed(false) {}
 
-	void addOffer(AssetPair assetPair, const IOCOffer& offer);
+	void addOffer(AssetPair const& assetPair, IOCOffer const& offer);
 
 	void commitChild(const IOCOrderbookManager& child);
 
@@ -50,8 +50,8 @@ public:
 	size_t numOpenOrderbooks() const;
 
 	void demandQuery(
-		UnorderedMap<Asset, uint64_t> const& prices, 
-		UnorderedMap<Asset, int128_t>& demandsOut, 
+		std::map<Asset, uint64_t> const& prices, 
+		std::map<Asset, int128_t>& demandsOut, 
 		uint8_t taxRate,
 		uint8_t smoothMult) const;
 

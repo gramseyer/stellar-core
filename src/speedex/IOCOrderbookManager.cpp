@@ -29,12 +29,11 @@ IOCOrderbookManager::doPriceComputationPreprocessing() {
 	{
 		orderbook.doPriceComputationPreprocessing();
 	}
-	mTatonnementStatsPrecomputed = true;
 }
 
 
 IOCOrderbook&
-IOCOrderbookManager::getOrCreateOrderbook(AssetPair assetPair) {
+IOCOrderbookManager::getOrCreateOrderbook(AssetPair const& assetPair) {
 	return (mOrderbooks.emplace(assetPair, assetPair).first->second);
 }
 
@@ -54,7 +53,7 @@ IOCOrderbookManager::commitChild(const IOCOrderbookManager& child) {
 }
 
 void
-IOCOrderbookManager::addOffer(AssetPair assetPair, const IOCOffer& offer) {
+IOCOrderbookManager::addOffer(AssetPair const& assetPair, IOCOffer const& offer) {
 	throwIfSealed();
 	getOrCreateOrderbook(assetPair).addOffer(offer);
 }
@@ -133,8 +132,8 @@ IOCOrderbookManager::clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& sol
 
 void 
 IOCOrderbookManager::demandQuery(
-	UnorderedMap<Asset, uint64_t> const& prices, 
-	UnorderedMap<Asset,int128_t>& demandsOut, 
+	std::map<Asset, uint64_t> const& prices, 
+	std::map<Asset,int128_t>& demandsOut, 
 	uint8_t taxRate, 
 	uint8_t smoothMult) const
 {
@@ -148,7 +147,8 @@ IOCOrderbookManager::demandQuery(
 
 		auto tradeAmount = orderbook.cumulativeOfferedForSaleTimesPrice(sellPrice, buyPrice, smoothMult);
 
-		demandsOut[assetPair.buying] += (tradeAmount - (tradeAmount >> taxRate)); // demand is positive
+		auto tax = taxRate == 0 ? 0 : tradeAmount >> taxRate;
+		demandsOut[assetPair.buying] += (tradeAmount - tax); // demand is positive
 		demandsOut[assetPair.selling] -= tradeAmount;
 	}
 }
