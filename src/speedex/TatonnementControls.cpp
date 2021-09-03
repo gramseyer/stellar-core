@@ -59,25 +59,25 @@ uint256_t::product(uint128_t a, uint128_t b)
 		return val >> 64;
 	};
 
-	constexpr auto printLow = [] (uint128_t val) -> void {
+	/*constexpr auto printLow = [] (uint128_t val) -> void {
 		std::printf("%llx\n", ((uint64_t)val));
 	};
 
 	constexpr auto print = [=] (uint128_t val) -> void {
 		std::printf("%llx %llx\n", (uint64_t) highbits(val), (uint64_t) lowbits(val));
-	};
+	};*/
 
 	const uint128_t lowA = lowbits(a);
 	const uint128_t lowB = lowbits(b);
 	const uint128_t highA = highbits(a);
 	const uint128_t highB = highbits(b);
 
-	std::printf("a\n");
-	printLow(highA);
-	printLow(lowA);
-	std::printf("b\n");
-	printLow(highB);
-	printLow(lowB);
+	//std::printf("a\n");
+	//printLow(highA);
+	//printLow(lowA);
+	//std::printf("b\n");
+	//printLow(highB);
+	//printLow(lowB);
 
 
 	uint128_t highOut = highA * highB;
@@ -89,9 +89,9 @@ uint256_t::product(uint128_t a, uint128_t b)
 		uint128_t prodLow = lowbits(prod);
 		uint128_t prodHigh = highbits(prod);
 
-		std::printf("mid\n");
-		printLow(prodLow);
-		printLow(prodHigh);
+		//std::printf("mid\n");
+		//printLow(prodLow);
+		//printLow(prodHigh);
 		
 		highOut += prodHigh;
 		
@@ -104,14 +104,14 @@ uint256_t::product(uint128_t a, uint128_t b)
 		}
 		lowOut = candidate;
 	};
-	print(lowOut);
-	print(highOut);
+	//print(lowOut);
+	//print(highOut);
 
 	addMidBits(lowA, highB);
 	addMidBits(lowB, highA);
 
-	print(lowOut);
-	print(highOut);
+	//print(lowOut);
+	//print(highOut);
 
 	return uint256_t {
 		.lowbits = lowOut,

@@ -30,7 +30,7 @@ public:
 
 	//map, not UnorderedMap, for deterministic ordering
 	//caller's responsibility to initialize starting prices
-	void computePrices(TatonnementControlParams const& params, std::map<Asset, uint64_t>& prices);
+	void computePrices(TatonnementControlParams const& params, std::map<Asset, uint64_t>& prices, uint32_t printFrequency = 0);
 };
 
 } /* stellar */

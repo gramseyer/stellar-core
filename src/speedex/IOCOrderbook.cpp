@@ -32,14 +32,14 @@ priceNEQ(Price const& p1, Price const& p2)
 
 void 
 IOCOrderbook::doPriceComputationPreprocessing() {
-	std::printf("preprocess\n");
+	//std::printf("preprocess\n");
 	PriceCompStats stats = zeroStats;
 	mPrecomputedTatonnementData.clear();
 	for (auto& offer : mOffers) {
 		//intentionally starting with 0 at bot
 		if (priceNEQ(offer.mMinPrice, stats.marginalPrice))
 		{
-			std::printf("adding (%d / %d) %lld\n", stats.marginalPrice.n, stats.marginalPrice.d, stats.cumulativeOfferedForSale);
+		//	std::printf("adding (%d / %d) %lld\n", stats.marginalPrice.n, stats.marginalPrice.d, stats.cumulativeOfferedForSale);
 			mPrecomputedTatonnementData.push_back(stats);
 		}
 		stats.marginalPrice = offer.mMinPrice;
@@ -108,7 +108,7 @@ IOCOrderbook::finish(AbstractLedgerTxn& ltx) {
 bool priceLT(Price const& p, uint64_t sellPrice, uint64_t buyPrice) {
 	using int128_t = __int128_t;
 
-	std::printf("priceLT comparison: sell %lu buy %lu p.n %d p.d %d\n", sellPrice, buyPrice, p.n, p.d);
+	//std::printf("priceLT comparison: sell %lu buy %lu p.n %d p.d %d\n", sellPrice, buyPrice, p.n, p.d);
 
 	// p.n / p.d <? sellPrice / buyPrice
 	return (((int128_t) p.n) * ((int128_t) buyPrice)) < (((int128_t) p.d) * ((int128_t) sellPrice)); 
@@ -117,7 +117,7 @@ bool priceLT(Price const& p, uint64_t sellPrice, uint64_t buyPrice) {
 bool priceLTE(Price const& p, uint64_t sellPrice, uint64_t buyPrice) {
 	using int128_t = __int128_t;
 
-	std::printf("priceLTE comparison: sell %lu buy %lu p.n %d p.d %d\n", sellPrice, buyPrice, p.n, p.d);
+	//std::printf("priceLTE comparison: sell %lu buy %lu p.n %d p.d %d\n", sellPrice, buyPrice, p.n, p.d);
 
 
 	// p.n / p.d <=? sellPrice / buyPrice
@@ -246,7 +246,7 @@ IOCOrderbook::cumulativeOfferedForSaleTimesPrice(uint64_t sellPrice, uint64_t bu
 	int64_t fullExecEndow = fullExecStats.cumulativeOfferedForSale;
 	int64_t partialExecEndow = partialExecStats.cumulativeOfferedForSale - fullExecEndow;
 
-	std::printf("full endow %lld partial endow %lld\n", fullExecEndow, partialExecEndow);
+//	std::printf("full endow %lld partial endow %lld\n", fullExecEndow, partialExecEndow);
 
 	int128_t fullExecEndowTimesPrice = fullExecStats.cumulativeOfferedForSaleTimesPrice;
 	int128_t partialExecEndowTimesPrice = partialExecStats.cumulativeOfferedForSaleTimesPrice - fullExecEndowTimesPrice;
@@ -259,13 +259,13 @@ IOCOrderbook::cumulativeOfferedForSaleTimesPrice(uint64_t sellPrice, uint64_t bu
 		return (highbits * mult) + ((lowbits * mult) >> PriceCompStats::OFFERED_TIMES_PRICE_RADIX);
 	};
 
-	std::printf("partialExecEndowTimesPrice %lf\n", (double) partialExecEndowTimesPrice / (double) 0x100000000);
+	//std::printf("partialExecEndowTimesPrice %lf\n", (double) partialExecEndowTimesPrice / (double) 0x100000000);
 
 	int128_t partialAmountTimesMinPriceTimesBuyPrice
 		= wideMultShiftDown(partialExecEndowTimesPrice, buyPrice);
 
-	std::printf("partialAmountTimesMinPriceTimesBuyPrice %lf\n", (double) partialAmountTimesMinPriceTimesBuyPrice);
-	std::printf("partialAmountTimesSellPrice %lf\n", (double) partialAmountTimesSellPrice);
+	//std::printf("partialAmountTimesMinPriceTimesBuyPrice %lf\n", (double) partialAmountTimesMinPriceTimesBuyPrice);
+	//std::printf("partialAmountTimesSellPrice %lf\n", (double) partialAmountTimesSellPrice);
 
 	int128_t partialAmountSum = partialAmountTimesSellPrice - partialAmountTimesMinPriceTimesBuyPrice;
 
@@ -273,7 +273,7 @@ IOCOrderbook::cumulativeOfferedForSaleTimesPrice(uint64_t sellPrice, uint64_t bu
 
 	int128_t valueSoldFullExec = ((int128_t) fullExecEndow) * ((int128_t) sellPrice);
 
-	std::printf("valueSoldFullExec %lf valueSoldPartialExec %lf\n", (double) valueSoldFullExec, (double) valueSoldPartialExec);
+	//std::printf("valueSoldFullExec %lf valueSoldPartialExec %lf\n", (double) valueSoldFullExec, (double) valueSoldPartialExec);
 
 	return valueSoldFullExec + valueSoldPartialExec;
 }

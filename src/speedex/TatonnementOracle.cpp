@@ -2,12 +2,19 @@
 
 #include "speedex/IOCOrderbookManager.h"
 
+#include "util/types.h"
+
 
 namespace stellar
 {
 
+TatonnementOracle::TatonnementOracle(const IOCOrderbookManager& orderbookManager)
+	: mOrderbookManager(orderbookManager) 
+{}
+
+
 void 
-TatonnementOracle::computePrices(TatonnementControlParams const& params, std::map<Asset, uint64_t>& prices)
+TatonnementOracle::computePrices(TatonnementControlParams const& params, std::map<Asset, uint64_t>& prices, uint32_t printFrequency)
 {
 	TatonnementControlParamsWrapper controlParams(params);
 
@@ -40,6 +47,17 @@ TatonnementOracle::computePrices(TatonnementControlParams const& params, std::ma
 			stepSize = controlParams.stepUp(std::max(stepSize, controlParams.kMinStepSize));
 		} else {
 			stepSize = controlParams.stepDown(stepSize);
+		}
+
+		if (printFrequency > 0 && controlParams.getRoundNumber() % printFrequency == 0)
+		{
+			std::printf("step size: %llu round number: %lu\n", stepSize, controlParams.getRoundNumber());
+			for (auto const& [asset, price] : prices)
+			{
+				int128_t demand = baselineDemand[asset];
+				auto str = assetToString(asset);
+				std::printf("%s\t%15llu\t%lf\n", str.c_str(), price, (double)demand);
+			}
 		}
 	}
 }

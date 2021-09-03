@@ -108,6 +108,10 @@ public:
 	setTrialPrices(std::map<Asset, uint64_t> const& curPrices, std::map<Asset, int128_t> const& demands, uint64_t stepSize) const;
 
 	uint64_t imposePriceBounds(uint64_t candidatePrice) const;
+
+	uint32_t getRoundNumber() const {
+		return mRoundNumber;
+	}
 };
 
 
