@@ -137,8 +137,6 @@ IOCOrderbookManager::demandQuery(
 	uint8_t taxRate, 
 	uint8_t smoothMult) const
 {
-	demandsOut.clear();
-
 	for (auto const& [assetPair, orderbook] : mOrderbooks)
 	{
 		auto sellPrice = prices.at(assetPair.selling);

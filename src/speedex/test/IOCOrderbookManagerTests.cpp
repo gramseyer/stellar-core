@@ -79,6 +79,7 @@ TEST_CASE("two asset orderbook manager demand query", "[speedex]")
 
 		prices[assets[0]] = 400;
 		prices[assets[1]] = 100;
+		demands.clear();
 		manager.demandQuery(prices, demands, 0, 1);
 		REQUIRE(demands[assets[0]] == -200 * amount);
 		REQUIRE(demands[assets[1]] == 200 * amount);
@@ -103,12 +104,14 @@ TEST_CASE("two asset orderbook manager demand query", "[speedex]")
 
 		prices[assets[0]] = 400;
 		prices[assets[1]] = 100;
+		demands.clear();
 		manager.demandQuery(prices, demands, 0, 0);
 		REQUIRE(demands[assets[0]] == -400 * amount);
 		REQUIRE(demands[assets[1]] == 400 * amount);
 
 		prices[assets[0]] = 200;
 		prices[assets[1]] = 100;
+		demands.clear();
 		manager.demandQuery(prices, demands, 0, 0);
 		REQUIRE(demands[assets[0]] == 100 * 3 * amount);
 		REQUIRE(demands[assets[1]] == -100 * 3 * amount);
@@ -134,6 +137,7 @@ TEST_CASE("two asset orderbook manager demand query", "[speedex]")
 
 		prices[assets[0]] = 500;
 		prices[assets[1]] = 100;
+		demands.clear();
 		manager.demandQuery(prices, demands, 0, 0);
 		REQUIRE(demands[assets[0]] == -500 * amount);
 		REQUIRE(demands[assets[1]] == 500 * amount);
@@ -155,10 +159,12 @@ TEST_CASE("two asset orderbook manager demand query", "[speedex]")
 		REQUIRE(demands[assets[0]] == -200 * amount);
 		REQUIRE(demands[assets[1]] == 200 * amount);
 
+		demands.clear();
 		manager.demandQuery(prices, demands, 1, 0);
 		REQUIRE(demands[assets[0]] == -200 * amount);
 		REQUIRE(demands[assets[1]] == 100 * amount);
 
+		demands.clear();
 		manager.demandQuery(prices, demands, 2, 0);
 		REQUIRE(demands[assets[0]] == -200 * amount);
 		REQUIRE(demands[assets[1]] == 150 * amount);

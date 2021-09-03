@@ -156,6 +156,5 @@ TEST_CASE("price adjust", "[speedex]")
 
 	REQUIRE(wrapper.setTrialPrice(startingPrice, demand, 10) == 11);
 
-	REQUIRE(wrapper.setTrialPrice(startingPrice, demand, 0) > 0);p
-
+	REQUIRE(wrapper.setTrialPrice(startingPrice, demand, 0) > 0);
 }

@@ -33,6 +33,7 @@ TatonnementOracle::computePrices(TatonnementControlParams const& params, std::ma
 		if (trialObjective.isBetterThan(baselineObjective, 1, 100) || stepSize < controlParams.kMinStepSize)
 		{
 			prices = trialPrices;
+			baselineDemand.clear();
 			mOrderbookManager.demandQuery(prices, baselineDemand, controlParams.taxRate(), controlParams.smoothMult());
 			baselineObjective = TatonnementObjectiveFn(baselineDemand);
 
