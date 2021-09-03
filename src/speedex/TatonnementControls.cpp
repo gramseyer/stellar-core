@@ -59,10 +59,26 @@ uint256_t::product(uint128_t a, uint128_t b)
 		return val >> 64;
 	};
 
+	constexpr auto printLow = [] (uint128_t val) -> void {
+		std::printf("%llx\n", ((uint64_t)val));
+	};
+
+	constexpr auto print = [=] (uint128_t val) -> void {
+		std::printf("%llx %llx\n", (uint64_t) highbits(val), (uint64_t) lowbits(val));
+	};
+
 	const uint128_t lowA = lowbits(a);
 	const uint128_t lowB = lowbits(b);
 	const uint128_t highA = highbits(a);
 	const uint128_t highB = highbits(b);
+
+	std::printf("a\n");
+	printLow(highA);
+	printLow(lowA);
+	std::printf("b\n");
+	printLow(highB);
+	printLow(lowB);
+
 
 	uint128_t highOut = highA * highB;
 	uint128_t lowOut = lowA * lowB;
@@ -72,6 +88,10 @@ uint256_t::product(uint128_t a, uint128_t b)
 		uint128_t prod = l * r;
 		uint128_t prodLow = lowbits(prod);
 		uint128_t prodHigh = highbits(prod);
+
+		std::printf("mid\n");
+		printLow(prodLow);
+		printLow(prodHigh);
 		
 		highOut += prodHigh;
 		
@@ -84,8 +104,14 @@ uint256_t::product(uint128_t a, uint128_t b)
 		}
 		lowOut = candidate;
 	};
+	print(lowOut);
+	print(highOut);
+
 	addMidBits(lowA, highB);
 	addMidBits(lowB, highA);
+
+	print(lowOut);
+	print(highOut);
 
 	return uint256_t {
 		.lowbits = lowOut,
@@ -97,17 +123,20 @@ int64_t
 uint256_t::compress(uint8_t radix) const 
 {
 	uint128_t out;
+	constexpr uint128_t MAX = INT64_MAX;
+
 	if (radix < 128)
 	{
-		out = (lowbits >> radix) & (highbits << (128 - radix));
+
+		out = (lowbits >> radix) | (highbits << (128 - radix));
 	} 
 	else
 	{
 		out = (highbits >> (radix - 128));
 	}
-	if (out >= INT64_MAX)
+	if (out >= MAX)
 	{
-		return (int64_t) INT64_MAX;
+		return INT64_MAX;
 	}
 	return (int64_t) out;
 }
@@ -238,17 +267,34 @@ TatonnementControlParamsWrapper::imposePriceBounds(uint64_t candidate) const {
 uint64_t 
 TatonnementControlParamsWrapper::setTrialPrice(uint64_t curPrice, int128_t const& demand, uint64_t stepSize) const
 {
+	/*
+
+	p -> p * (1 + demand * step), where demand is (already) weighted by pricel
+
+	p += p * demand * step
+
+	the delta is price * demand * stepSize >> stepRadix;
+
+	*/
+
+
 	uint128_t step_times_old_price = ((uint128_t) curPrice) * ((uint128_t) stepSize);
+
+	std::printf("%lf\n", (double) step_times_old_price);
 	
 	// want step_times_old_price * demand >> mParams.mStepRadix;
 
 	int sign = (demand > 0) ? 1 : -1;
 
-	uint128_t unsignedDemand = demand * sign;
+	uint128_t unsignedDemand = demand > 0 ? demand : -demand;
+
+	std::printf("%lf %lf\n", (double) demand, (double) unsignedDemand);
 
 	uint256_t product = uint256_t::product(step_times_old_price, unsignedDemand);
 
 	int64_t delta = (product.compress(mParams.mStepRadix));
+
+	std::printf("delta = %llx\n", delta);
 
 	uint64_t candidateOut;
 	if (sign > 0) {

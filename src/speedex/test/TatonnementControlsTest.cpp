@@ -117,6 +117,45 @@ TEST_CASE("objective function", "[speedex]")
 
 	REQUIRE(obj1.isBetterThan(obj2, 100, 101));
 	REQUIRE(obj2.isBetterThan(obj1, 100, 101));
+}
 
+TEST_CASE("step adjustments", "[speedex]")
+{
+
+	auto check = [] (uint8_t radix) {
+		TatonnementControlParams params;
+		params.mStepSizeRadix = radix;
+
+		//minimum possible step size adjustments
+		params.mStepUp = ((1u) << radix) + 1;
+		params.mStepDown = ((1u) << radix) - 1;
+
+		TatonnementControlParamsWrapper wrapper(params);
+		REQUIRE(wrapper.stepUp(wrapper.kMinStepSize) > wrapper.kMinStepSize);
+		REQUIRE(wrapper.stepDown(wrapper.kMinStepSize) < wrapper.kMinStepSize);	
+	};
+
+	for (uint8_t i = 1; i < 8; i++) {
+		check(i);
+	}
+}
+
+TEST_CASE("price adjust", "[speedex]")
+{
+	using int128_t = __int128;
+
+	TatonnementControlParams params;
+	params.mStepRadix = 80;
+
+	TatonnementControlParamsWrapper wrapper(params);
+
+	int128_t demand = ((int128_t)1) << 80;
+
+	uint64_t startingPrice = 1;
+	REQUIRE(wrapper.setTrialPrice(startingPrice, demand, 1) == 2);
+
+	REQUIRE(wrapper.setTrialPrice(startingPrice, demand, 10) == 11);
+
+	REQUIRE(wrapper.setTrialPrice(startingPrice, demand, 0) > 0);p
 
 }
