@@ -19,10 +19,18 @@ class LiquidityPoolFrame {
 
 	double getMinPriceRatio() const;
 
+	uint32_t
+	getFixedPointFeeRate() const;
+	uint64_t
+	subtractFeeRateFixedPoint(uint64_t startingPrice) const;
+
+public:
+
 	std::pair<int64_t, int64_t> 
 	getSellBuyAmounts() const;
 
-public:
+	std::pair<uint64_t, uint64_t>
+	getMinPriceRatioFixedPoint() const;
 
 	LiquidityPoolFrame(AbstractLedgerTxn& ltx, AssetPair const& assetPair);
 	
@@ -35,6 +43,9 @@ public:
 	void assertValidTrade(int64_t sellAmount, int64_t buyAmount, uint64_t sellPrice, uint64_t buyPrice) const;
 
 	void doTransfer(int64_t sellAmount, int64_t buyAmount, uint64_t sellPrice, uint64_t buyPrice);
+
+	int128_t 
+	amountOfferedForSaleTimesSellPrice(uint64_t sellPrice, uint64_t buyPrice) const;
 
 };
 

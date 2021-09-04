@@ -9,6 +9,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include "util/numeric.h"
+
 namespace stellar {
 
 LiquidityPoolFrame::LiquidityPoolFrame(AbstractLedgerTxn& ltx, AssetPair const& assetPair)
@@ -43,7 +45,35 @@ LiquidityPoolFrame::getFeeRate() const {
 	if (!mEntry) {
 		return 0.0;
 	}
-	return (((double) mEntry.current().data.liquidityPool().body.constantProduct().params.fee) / (100.0));
+	return (((double) mEntry.current().data.liquidityPool().body.constantProduct().params.fee) / (10000.0));
+}
+
+uint32_t
+LiquidityPoolFrame::getFixedPointFeeRate() const {
+	if (!mEntry) {
+		std::printf("get fixed rate no fee\n");
+		return 0;
+	}
+	return mEntry.current().data.liquidityPool().body.constantProduct().params.fee;
+}
+
+uint64_t
+LiquidityPoolFrame::subtractFeeRateFixedPoint(uint64_t startingPrice) const
+{
+	uint32_t fee = getFixedPointFeeRate();
+
+	std::printf("%u\n", fee);
+
+	using uint128_t = unsigned __int128;
+
+	uint64_t tax = ((((uint128_t) startingPrice) * fee) / 10000);
+
+	std::printf("tax=%llu\n", tax);
+	if (tax >= startingPrice) {
+		return 0;
+	}
+
+	return startingPrice - tax;
 }
 
 double
@@ -51,6 +81,106 @@ LiquidityPoolFrame::getMinPriceRatio() const {
 	auto [sellAmount, buyAmount] = getSellBuyAmounts();
 	double feeRate = getFeeRate();
 	return (((double) buyAmount) / ((double) sellAmount)) * (1.0 / (1.0 -  feeRate));
+}
+
+//returns fraction n/d
+std::pair<uint64_t, uint64_t>
+LiquidityPoolFrame::getMinPriceRatioFixedPoint() const {
+	auto [sellAmount, buyAmount] = getSellBuyAmounts();
+
+	// return (buy / sell) * (1/(1-fee))
+
+	return {buyAmount, subtractFeeRateFixedPoint(sellAmount)};
+}
+
+LiquidityPoolFrame::int128_t 
+LiquidityPoolFrame::amountOfferedForSaleTimesSellPrice(uint64_t sellPrice, uint64_t buyPrice) const
+{
+	auto [sellAmount, buyAmount] = getSellBuyAmounts(); // reserves
+
+	using uint128_t = unsigned __int128;
+
+	if (sellAmount == 0) {
+		return 0;
+	}
+
+	auto [priceN, priceD] = getMinPriceRatioFixedPoint();
+	if (priceD == 0) {
+		return 0;
+	}
+
+	auto priceLT = [] (uint64_t p1n, uint64_t p1d, uint64_t p2n, uint64_t p2d) -> bool
+	{
+		// p1n/p1d <? p2n/p2d
+		return ((uint128_t) p1n) * ((uint128_t) p2d) < ((uint128_t) p2n) * ((uint128_t) p1d);
+	};
+
+	if (priceLT(sellPrice, buyPrice, priceN, priceD)) {
+		return 0;
+	}
+
+	/*
+
+	output trade amounts (not sellprice weighted):
+
+	K = product of reserves (sellAmount * buyAmount)
+
+	sqrt(K) * (1/sqrt(minRatio) - 1/sqrt(offeredRatio))
+
+	but K = sellAmount * buyAmount, and minratio = buyAmount / (sellAmount (1-fee))
+
+	so we get 
+	sqrt((sell * buy) * (sell(1-fee)) / buy)
+	= sell * sqrt(1-fee)
+	= sqrt(sell * sell * (1-fee))
+	= sqrt(sellAmount * priceD)
+
+	all told, we get
+
+	sqrt(sell * priceD) - sqrt(sellAmount * buyAmount / (sellPrice / buyPrice))
+
+	Multiplying by sellPrice gives
+
+	sellPrice * sqrt(sellAmount * priceD) - sqrt(sellAmount * sellPrice * buyAmount * buyPrice);
+	
+	*/
+
+	constexpr auto sqrt = [](uint64_t a, uint64_t b) -> uint64_t {
+		// return bigSquareRoot(a, b)
+		return (uint64_t) std::ceil(std::pow(((double)a) * ((double) b), 0.5));
+	};
+
+	constexpr auto hackyBigSquareRootRoundDown = [=] (uint64_t a, uint64_t b) -> uint64_t {
+		uint64_t sqrtRoundUp = sqrt(a, b);
+		uint128_t prod = ((uint128_t) a) * ((uint128_t) b);
+		uint128_t prodRoundUp = ((uint128_t) sqrtRoundUp) * ((uint128_t) sqrtRoundUp);
+		if (prod == prodRoundUp) {
+			return sqrtRoundUp;
+		}
+		return sqrtRoundUp - 1;
+	};
+
+	constexpr auto hackyBigSquareRootRoundUp = [=] (uint64_t a, uint64_t b) -> uint64_t {
+		return sqrt(a,b);
+	};
+
+	uint64_t firstTerm = hackyBigSquareRootRoundDown(sellAmount, priceD);
+	//std::printf("firstTerm: %llu\n", firstTerm);
+
+	uint64_t secondTermA = hackyBigSquareRootRoundUp(buyAmount, buyPrice);
+	uint64_t secondTermB = hackyBigSquareRootRoundUp(sellAmount, sellPrice);
+
+	//std::printf("secondTermA %llu secondTermB %llu\n", secondTermA, secondTermB);
+
+	uint128_t total = ((uint128_t) sellPrice) * ((uint128_t) firstTerm)
+		- ((uint128_t) secondTermA) * ((uint128_t) secondTermB);
+
+	constexpr uint128_t INT128_MAX = (((uint128_t)1) << 127) - 1;
+
+	if (total > INT128_MAX) {
+		return INT128_MAX;
+	}
+	return total;
 }
 
 int64_t 
