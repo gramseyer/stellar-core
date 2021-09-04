@@ -10,20 +10,25 @@
 
 #include  <cstdint>
 
+#include "speedex/DemandOracle.h"
+
 namespace stellar
 {
 
 class IOCOrderbookManager;
+class LiquidityPoolSetFrame;
 
 class TatonnementOracle {
 
 	using int128_t = __int128;
 
-	const IOCOrderbookManager& mOrderbookManager;
+	DemandOracle mDemandOracle;
+
+	void demandQuery(std::map<Asset, uint64_t> const& prices, std::map<Asset, int128_t>& demands, uint8_t taxRate, uint8_t smoothMult) const;
 
 public:
 
-	TatonnementOracle(const IOCOrderbookManager& orderbookManager);
+	TatonnementOracle(IOCOrderbookManager const& orderbookManager, LiquidityPoolSetFrame const& liquidityPools);
 
 	TatonnementOracle(const TatonnementOracle&) = delete;
 	TatonnementOracle& operator=(const TatonnementOracle&) = delete;

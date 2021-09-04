@@ -164,6 +164,8 @@ LiquidityPoolFrame::amountOfferedForSaleTimesSellPrice(uint64_t sellPrice, uint6
 		return sqrt(a,b);
 	};
 
+	// Rounding in this manner underestimates available trade amounts, but this is ok.
+	// Better to underestimate than overestimate.
 	uint64_t firstTerm = hackyBigSquareRootRoundDown(sellAmount, priceD);
 	//std::printf("firstTerm: %llu\n", firstTerm);
 

@@ -2,6 +2,7 @@
 #include "speedex/IOCOrderbook.h"
 #include "speedex/IOCOffer.h"
 #include "speedex/IOCOrderbookManager.h"
+#include "speedex/DemandUtils.h"
 
 #include "ledger/AssetPair.h"
 
@@ -67,22 +68,23 @@ TEST_CASE("two asset orderbook manager demand query", "[speedex]")
 
 		manager.sealBatch();
 
-		std::map<Asset, int128_t> demands;
-
 		std::map<Asset, uint64_t> prices;
 
-		prices[assets[0]] = 400;
-		prices[assets[1]] = 100;
-		manager.demandQuery(prices, demands, 0, 0);
-		REQUIRE(demands[assets[0]] == -400 * amount);
-		REQUIRE(demands[assets[1]] == 400 * amount);
+		SupplyDemand sd1;
 
 		prices[assets[0]] = 400;
 		prices[assets[1]] = 100;
-		demands.clear();
-		manager.demandQuery(prices, demands, 0, 1);
-		REQUIRE(demands[assets[0]] == -200 * amount);
-		REQUIRE(demands[assets[1]] == 200 * amount);
+		manager.demandQuery(prices, sd1, 0);
+		REQUIRE(sd1.getDelta(assets[0]) == -400 * amount);
+		REQUIRE(sd1.getDelta(assets[1]) == 400 * amount);
+
+		prices[assets[0]] = 400;
+		prices[assets[1]] = 100;
+
+		SupplyDemand sd2;
+		manager.demandQuery(prices, sd2, 1);
+		REQUIRE(sd2.getDelta(assets[0]) == -200 * amount);
+		REQUIRE(sd2.getDelta(assets[1]) == 200 * amount);
 	}
 	SECTION("both directions, same price")
 	{
@@ -91,30 +93,35 @@ TEST_CASE("two asset orderbook manager demand query", "[speedex]")
 
 		manager.sealBatch();
 
-		std::map<Asset, int128_t> demands;
-
 		std::map<Asset, uint64_t> prices;
 
-		prices[assets[0]] = 300;
-		prices[assets[1]] = 100;
-		manager.demandQuery(prices, demands, 0, 0);
-		REQUIRE(demands[assets[0]] == 0);
-		REQUIRE(demands[assets[1]] == 0);
+		SupplyDemand sd;
 
+		SECTION("eq")
+		{
+			prices[assets[0]] = 300;
+			prices[assets[1]] = 100;
+			manager.demandQuery(prices, sd, 0);
+			REQUIRE(sd.getDelta(assets[0]) == 0);
+			REQUIRE(sd.getDelta(assets[1]) == 0);
+		}
+		SECTION("above eq")
+		{
+			prices[assets[0]] = 400;
+			prices[assets[1]] = 100;
+			manager.demandQuery(prices, sd, 0);
+			REQUIRE(sd.getDelta(assets[0]) == -400 * amount);
+			REQUIRE(sd.getDelta(assets[1]) == 400 * amount);
+		}
 
-		prices[assets[0]] = 400;
-		prices[assets[1]] = 100;
-		demands.clear();
-		manager.demandQuery(prices, demands, 0, 0);
-		REQUIRE(demands[assets[0]] == -400 * amount);
-		REQUIRE(demands[assets[1]] == 400 * amount);
-
-		prices[assets[0]] = 200;
-		prices[assets[1]] = 100;
-		demands.clear();
-		manager.demandQuery(prices, demands, 0, 0);
-		REQUIRE(demands[assets[0]] == 100 * 3 * amount);
-		REQUIRE(demands[assets[1]] == -100 * 3 * amount);
+		SECTION("below eq")
+		{
+			prices[assets[0]] = 200;
+			prices[assets[1]] = 100;
+			manager.demandQuery(prices, sd, 0);
+			REQUIRE(sd.getDelta(assets[0]) == 100 * 3 * amount);
+			REQUIRE(sd.getDelta(assets[1]) == -100 * 3 * amount);
+		}
 	}
 
 	SECTION("both directions, price gap")
@@ -124,52 +131,59 @@ TEST_CASE("two asset orderbook manager demand query", "[speedex]")
 
 		manager.sealBatch();
 
-		std::map<Asset, int128_t> demands;
-
 		std::map<Asset, uint64_t> prices;
+
+		SupplyDemand sd1;
 
 		prices[assets[0]] = 100;
 		prices[assets[1]] = 100;
-		manager.demandQuery(prices, demands, 0, 0);
-		REQUIRE(demands[assets[0]] == 0);
-		REQUIRE(demands[assets[1]] == 0);
+		manager.demandQuery(prices, sd1, 0);
+		REQUIRE(sd1.getDelta(assets[0]) == 0);
+		REQUIRE(sd1.getDelta(assets[1]) == 0);
 
 
 		prices[assets[0]] = 500;
 		prices[assets[1]] = 100;
-		demands.clear();
-		manager.demandQuery(prices, demands, 0, 0);
-		REQUIRE(demands[assets[0]] == -500 * amount);
-		REQUIRE(demands[assets[1]] == 500 * amount);
+
+		SupplyDemand sd2;
+		manager.demandQuery(prices, sd2, 0);
+		REQUIRE(sd2.getDelta(assets[0]) == -500 * amount);
+		REQUIRE(sd2.getDelta(assets[1]) == 500 * amount);
 	}
 
-	SECTION("tax one offer")
+	/*SECTION("tax one offer")
 	{
 		addOffer(manager, 100, 100, amount, assets[0], assets[1], 1);
 
 		manager.sealBatch();
 
-		std::map<Asset, int128_t> demands;
-
 		std::map<Asset, uint64_t> prices;
+
+		SupplyDemand sd;
 
 		prices[assets[0]] = 200;
 		prices[assets[1]] = 100;
-		manager.demandQuery(prices, demands, 0, 0);
-		REQUIRE(demands[assets[0]] == -200 * amount);
-		REQUIRE(demands[assets[1]] == 200 * amount);
+		SECTION("smooth 0")
+		{
+			manager.demandQuery(prices, sd, 0, 0);
+			REQUIRE(sd.getDelta(assets[0]) == -200 * amount);
+			REQUIRE(sd.getDelta(assets[1]) == 200 * amount);
+		}
+		SECTION("smooth 1")
+		{
+			manager.demandQuery(prices, demands, 1, 0);
+			REQUIRE(sd.getDelta(assets[0]) == -200 * amount);
+			REQUIRE(sd.getDelta(assets[1]) == 100 * amount);
+		}
 
-		demands.clear();
-		manager.demandQuery(prices, demands, 1, 0);
-		REQUIRE(demands[assets[0]] == -200 * amount);
-		REQUIRE(demands[assets[1]] == 100 * amount);
+		SECTION("smooth 2")
+		{
+			manager.demandQuery(prices, demands, 2, 0);
+			REQUIRE(sd.getDelta(assets[0]) == -200 * amount);
+			REQUIRE(sd.getDelta(assets[1]) == 150 * amount);
+		}
 
-		demands.clear();
-		manager.demandQuery(prices, demands, 2, 0);
-		REQUIRE(demands[assets[0]] == -200 * amount);
-		REQUIRE(demands[assets[1]] == 150 * amount);
-
-	}
+	}*/
 
 }
 

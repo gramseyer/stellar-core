@@ -109,13 +109,25 @@ TEST_CASE("lp trade amounts", "[speedex]")
     	createLiquidityPool(pair1.selling, pair1.buying, 1000, 1000, ltx, 0);
 
     	LiquidityPoolFrame frame(ltx, pair1);
-
-        std::printf("%lf\n", (double) frame.amountOfferedForSaleTimesSellPrice(25, 1));
     	
     	REQUIRE(frame.amountOfferedForSaleTimesSellPrice(25, 1) <= 25 * 800);
     	REQUIRE(frame.amountOfferedForSaleTimesSellPrice(1, 100) == 0);
     	REQUIRE(frame.amountOfferedForSaleTimesSellPrice(100, 1) <= 100 * 900);
     	REQUIRE(frame.amountOfferedForSaleTimesSellPrice(10000, 100) <= 10000 * 900);
+    }
+
+    SECTION("deltas with fees")
+    {
+        createLiquidityPool(pair1.selling, pair1.buying, 1000, 1000, ltx);
+        createLiquidityPool(pair2.selling, pair2.buying, 200, 5000, ltx);
+
+        LiquidityPoolFrame frame1(ltx, pair1);
+        LiquidityPoolFrame frame2(ltx, pair2);
+
+        auto delta = frame1.amountOfferedForSaleTimesSellPrice(100, 1)
+            - frame2.amountOfferedForSaleTimesSellPrice(100, 1);
+
+        REQUIRE(delta <= 100 * 800);
     }
 
 }

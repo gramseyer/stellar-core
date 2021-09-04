@@ -13,6 +13,7 @@ namespace stellar {
 class AbstractLedgerTxn;
 class BatchClearingTarget;
 class OrderbookClearingTarget;
+struct SupplyDemand;
 
 class IOCOrderbookManager {
 	using int128_t = __int128_t;
@@ -51,8 +52,7 @@ public:
 
 	void demandQuery(
 		std::map<Asset, uint64_t> const& prices, 
-		std::map<Asset, int128_t>& demandsOut, 
-		uint8_t taxRate,
+		SupplyDemand& supplyDemand,
 		uint8_t smoothMult) const;
 
 

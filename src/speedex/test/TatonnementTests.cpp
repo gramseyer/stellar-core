@@ -6,7 +6,10 @@
 #include "speedex/TatonnementOracle.h"
 #include "speedex/TatonnementControls.h"
 
+#include "speedex/LiquidityPoolSetFrame.h"
+
 #include "ledger/AssetPair.h"
+#include "ledger/LedgerTxn.h"
 
 #include "test/TxTests.h"
 
@@ -55,9 +58,17 @@ static void addOffer(IOCOrderbookManager& orderbookManager, int32_t p_n, int32_t
 
 TEST_CASE("small 2-asset tatonnement run", "[speedex][tatonnement]")
 {
+
+	Config cfg(getTestConfig());
+	cfg.LEDGER_PROTOCOL_VERSION = 17;
+    VirtualClock clock;
+    Application::pointer app = createTestApplication(clock, cfg);
+    LedgerTxn ltx(app->getLedgerTxnRoot());
+
 	auto assets = makeAssets(2);
 
 	IOCOrderbookManager manager;
+	LiquidityPoolSetFrame lpFrame({}, ltx);
 
 	for (int32_t i = 90; i < 110; i++) {
 		addOffer(manager, i, 100, 1000, assets[0], assets[1], i);
@@ -77,7 +88,7 @@ TEST_CASE("small 2-asset tatonnement run", "[speedex][tatonnement]")
 		.mStepRadix = 65
 	};
 
-	TatonnementOracle oracle(manager);
+	TatonnementOracle oracle(manager, lpFrame);
 
 	std::map<Asset, uint64_t> prices;
 	prices[assets[0]] = 100000;

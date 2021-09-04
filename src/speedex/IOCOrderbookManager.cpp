@@ -8,6 +8,8 @@
 
 #include "util/types.h"
 
+#include "speedex/DemandUtils.h"
+
 namespace stellar {
 
 void 
@@ -133,8 +135,7 @@ IOCOrderbookManager::clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& sol
 void 
 IOCOrderbookManager::demandQuery(
 	std::map<Asset, uint64_t> const& prices, 
-	std::map<Asset,int128_t>& demandsOut, 
-	uint8_t taxRate, 
+	SupplyDemand& supplyDemand,
 	uint8_t smoothMult) const
 {
 	for (auto const& [assetPair, orderbook] : mOrderbooks)
@@ -145,9 +146,11 @@ IOCOrderbookManager::demandQuery(
 
 		auto tradeAmount = orderbook.cumulativeOfferedForSaleTimesPrice(sellPrice, buyPrice, smoothMult);
 
-		auto tax = taxRate == 0 ? 0 : tradeAmount >> taxRate;
-		demandsOut[assetPair.buying] += (tradeAmount - tax); // demand is positive
-		demandsOut[assetPair.selling] -= tradeAmount;
+		supplyDemand.addSupplyDemand(assetPair, tradeAmount);
+
+		//auto tax = taxRate == 0 ? 0 : tradeAmount >> taxRate;
+		//demandsOut[assetPair.buying] += (tradeAmount - tax); // demand is positive
+		//demandsOut[assetPair.selling] -= tradeAmount;
 	}
 }
 

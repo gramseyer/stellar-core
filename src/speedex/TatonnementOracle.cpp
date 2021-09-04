@@ -1,28 +1,31 @@
 #include "speedex/TatonnementOracle.h"
 
 #include "speedex/IOCOrderbookManager.h"
+#include "speedex/LiquidityPoolSetFrame.h"
 
 #include "util/types.h"
+
+#include "speedex/DemandOracle.h"
+#include "speedex/DemandUtils.h"
 
 
 namespace stellar
 {
 
-TatonnementOracle::TatonnementOracle(const IOCOrderbookManager& orderbookManager)
-	: mOrderbookManager(orderbookManager) 
+TatonnementOracle::TatonnementOracle(IOCOrderbookManager const& orderbookManager, LiquidityPoolSetFrame const& liquidityPools)
+	: mDemandOracle(orderbookManager, liquidityPools)
 {}
-
 
 void 
 TatonnementOracle::computePrices(TatonnementControlParams const& params, std::map<Asset, uint64_t>& prices, uint32_t printFrequency)
 {
 	TatonnementControlParamsWrapper controlParams(params);
 
-	std::map<Asset, int128_t> baselineDemand;
 
-	mOrderbookManager.demandQuery(prices, baselineDemand, controlParams.taxRate(), controlParams.smoothMult());
+	SupplyDemand baselineDemand = mDemandOracle.demandQuery(prices, controlParams.smoothMult());
 
-	TatonnementObjectiveFn baselineObjective(baselineDemand);
+
+	TatonnementObjectiveFn baselineObjective = baselineDemand.getObjective();
 
 	uint64_t stepSize = controlParams.kStartingStepSize;
 
@@ -31,18 +34,22 @@ TatonnementOracle::computePrices(TatonnementControlParams const& params, std::ma
 		controlParams.incrementRound();
 
 		std::map<Asset, uint64_t> trialPrices = controlParams.setTrialPrices(prices, baselineDemand, stepSize);
-		std::map<Asset, int128_t> trialDemand;
 
-		mOrderbookManager.demandQuery(trialPrices, trialDemand, controlParams.taxRate(), controlParams.smoothMult());
+		auto trialDemand = mDemandOracle.demandQuery(trialPrices, controlParams.smoothMult());
 
-		TatonnementObjectiveFn trialObjective(trialDemand);
+		//demandQuery(trialPrices, trialDemand, controlParams.taxRate(), controlParams.smoothMult());
+
+		TatonnementObjectiveFn trialObjective = trialDemand.getObjective();
 
 		if (trialObjective.isBetterThan(baselineObjective, 1, 100) || stepSize < controlParams.kMinStepSize)
 		{
 			prices = trialPrices;
-			baselineDemand.clear();
-			mOrderbookManager.demandQuery(prices, baselineDemand, controlParams.taxRate(), controlParams.smoothMult());
-			baselineObjective = TatonnementObjectiveFn(baselineDemand);
+
+			baselineDemand = mDemandOracle.demandQuery(prices, controlParams.smoothMult());
+			
+			//demandQuery(prices, baselineDemand, controlParams.taxRate(), controlParams.smoothMult());
+			
+			baselineObjective = baselineDemand.getObjective();
 
 			stepSize = controlParams.stepUp(std::max(stepSize, controlParams.kMinStepSize));
 		} else {
@@ -54,7 +61,7 @@ TatonnementOracle::computePrices(TatonnementControlParams const& params, std::ma
 			std::printf("step size: %llu round number: %lu\n", stepSize, controlParams.getRoundNumber());
 			for (auto const& [asset, price] : prices)
 			{
-				int128_t demand = baselineDemand[asset];
+				int128_t demand = baselineDemand.getDelta(asset);
 				auto str = assetToString(asset);
 				std::printf("%s\t%15llu\t%lf\n", str.c_str(), price, (double)demand);
 			}
