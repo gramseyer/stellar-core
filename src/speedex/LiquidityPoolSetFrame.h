@@ -23,6 +23,9 @@ public:
 
 	void demandQuery(std::map<Asset, uint64_t> const& prices, SupplyDemand& supplyDemand) const;
 
+	int128_t 
+	demandQueryOneAssetPair(AssetPair const& tradingPair, std::map<Asset, uint64_t> const& prices) const;
+
 };
 
 } /* stellar */

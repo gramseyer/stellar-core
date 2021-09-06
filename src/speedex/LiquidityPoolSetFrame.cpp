@@ -42,5 +42,15 @@ LiquidityPoolSetFrame::demandQuery(std::map<Asset, uint64_t> const& prices, Supp
 	}
 }
 
+LiquidityPoolSetFrame::int128_t
+LiquidityPoolSetFrame::demandQueryOneAssetPair(AssetPair const& tradingPair, std::map<Asset, uint64_t> const& prices) const
+{
+	auto iter = mLiquidityPools.find(tradingPair);
+	if (iter == mLiquidityPools.end()) {
+		return 0;
+	}
+	return iter->second.amountOfferedForSaleTimesSellPrice(prices.at(tradingPair.selling), prices.at(tradingPair.buying));
+}
+
 
 } /* stellar */

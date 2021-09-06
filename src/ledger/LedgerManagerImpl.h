@@ -81,6 +81,8 @@ class LedgerManagerImpl : public LedgerManager
                       AbstractLedgerTxn& ltx, TransactionResultSet& txResultSet,
                       std::unique_ptr<LedgerCloseMeta> const& ledgerCloseMeta);
 
+    void runSpeedex(AbstractLedgerTxn& ltx);
+
     void ledgerClosed(AbstractLedgerTxn& ltx);
 
     void storeCurrentLedger(LedgerHeader const& header);

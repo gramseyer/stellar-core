@@ -5,9 +5,10 @@
 namespace stellar {
 
 
-BatchSolution::BatchSolution() {
-	//TODO init
-}
+BatchSolution::BatchSolution(UnorderedMap<AssetPair, int128_t, AssetPairHash> const& tradeAmounts, std::map<Asset, uint64_t> const& prices)
+	: mTradeAmountsTimesPrices(tradeAmounts)
+	, mAssetPrices(prices)
+{}
 
 
 std::vector<OrderbookClearingTarget>

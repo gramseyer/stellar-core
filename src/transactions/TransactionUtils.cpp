@@ -420,10 +420,10 @@ loadSpeedexConfig(AbstractLedgerTxn& ltx)
     return ltx.load(speedexConfigKey());
 }
 
-SpeedexConfigEntryFrame
+SpeedexConfigSnapshotFrame
 loadSpeedexConfigSnapshot(AbstractLedgerTxn&ltx)
 {
-    return SpeedexConfigEntryFrame(ltx.loadSnapshotEntry(speedexConfigKey()));
+    return SpeedexConfigSnapshotFrame(ltx.loadSnapshotEntry(speedexConfigKey()));
 }
 
 LedgerTxnEntry

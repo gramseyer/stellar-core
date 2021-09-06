@@ -25,7 +25,7 @@ struct LedgerHeader;
 struct LedgerKey;
 struct TransactionEnvelope;
 struct MuxedAccount;
-class SpeedexConfigEntryFrame;
+class SpeedexConfigSnapshotFrame;
 
 template <typename IterType>
 std::pair<IterType, bool>
@@ -115,7 +115,7 @@ LedgerTxnEntry loadSponsorshipCounter(AbstractLedgerTxn& ltx,
 
 LedgerTxnEntry loadSpeedexConfig(AbstractLedgerTxn& ltx);
 
-SpeedexConfigEntryFrame loadSpeedexConfigSnapshot(AbstractLedgerTxn& ltx);
+SpeedexConfigSnapshotFrame loadSpeedexConfigSnapshot(AbstractLedgerTxn& ltx);
 LedgerTxnEntry loadPoolShareTrustLine(AbstractLedgerTxn& ltx,
                                       AccountID const& accountID,
                                       PoolID const& poolID);

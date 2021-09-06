@@ -34,8 +34,6 @@ class TradeMaximizingSolver {
 
 	std::vector<bool> mActiveYijs;
 
-	//UnorderedSet<size_t> mActiveYijs;
-
 	UnorderedMap<std::pair<size_t, size_t>, int128_t> mSolutionMap;
 
 	UnorderedMap<row_idx_t, col_idx_t> mActiveBasis;
@@ -86,11 +84,13 @@ public:
 	TradeMaximizingSolver(const TradeMaximizingSolver&) = delete;
 	TradeMaximizingSolver& operator=(const TradeMaximizingSolver&) = delete;
 
-	void setUpperBound(AssetPair assetPair, int128_t upperBound);
+	void setUpperBound(AssetPair const& assetPair, int128_t upperBound);
 
 	void doSolve();
 
-	int128_t getRowResult(AssetPair assetPair) const;
+	int128_t getRowResult(AssetPair const& assetPair) const;
+
+	UnorderedMap<AssetPair, int128_t, AssetPairHash> getSolution() const;
 
 	void printSolution() const;
 

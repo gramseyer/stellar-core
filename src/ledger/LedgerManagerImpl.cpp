@@ -26,6 +26,12 @@
 #include "main/Config.h"
 #include "main/ErrorMessages.h"
 #include "overlay/OverlayManager.h"
+#include "simplex/solver.h"
+#include "speedex/DemandOracle.h"
+#include "speedex/LiquidityPoolSetFrame.h"
+#include "speedex/TatonnementControls.h"
+#include "speedex/TatonnementOracle.h"
+#include "speedex/SpeedexConfigEntryFrame.h"
 #include "transactions/OperationFrame.h"
 #include "transactions/TransactionSQL.h"
 #include "transactions/TransactionUtils.h"
@@ -1125,6 +1131,36 @@ LedgerManagerImpl::applyTransaction(
 }
 
 void
+LedgerManagerImpl::runSpeedex(
+    AbstractLedgerTxn& ltx)
+{
+    auto& speedexOrderbooks = ltx.getSpeedexIOCOffers();
+    speedexOrderbooks.sealBatch();
+
+    auto speedexConfig = loadSpeedexConfigSnapshot(ltx);
+
+    LiquidityPoolSetFrame liquidityPools(speedexConfig.getAssets(), ltx);
+
+
+    DemandOracle demandOracle(speedexOrderbooks, liquidityPools);
+
+    TatonnementOracle oracle(demandOracle);
+
+    TatonnementControlParams controls = speedexConfig.getControls();
+    std::map<Asset, uint64_t> prices = speedexConfig.getStartingPrices();
+
+    oracle.computePrices(controls, prices);
+
+    TradeMaximizingSolver solver(speedexConfig.getAssets());
+
+    demandOracle.setSolverUpperBounds(solver, prices);
+
+    BatchSolution solution(solver.getSolution(), prices);
+
+    speedexOrderbooks.clearBatch(ltx, solution);
+}
+
+void
 LedgerManagerImpl::applyTransactions(
     std::vector<TransactionFrameBasePtr>& commutativeTxs,
     std::vector<TransactionFrameBasePtr>& noncommutativeTxs, 
@@ -1163,12 +1199,7 @@ LedgerManagerImpl::applyTransactions(
         applyTransaction(tx, ltx, txResultSet, ledgerCloseMeta, index);
     }
 
-    auto& speedexOrderbooks = ltx.getSpeedexIOCOffers();
-    speedexOrderbooks.sealBatch();
-
-    BatchSolution solution; // TODO price computation
-
-    speedexOrderbooks.clearBatch(ltx, solution);
+    runSpeedex(ltx);
 
     prefetchTransactionData(noncommutativeTxs);
 

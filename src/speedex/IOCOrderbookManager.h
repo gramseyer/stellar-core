@@ -55,6 +55,8 @@ public:
 		SupplyDemand& supplyDemand,
 		uint8_t smoothMult) const;
 
+	int128_t demandQueryOneAssetPair(AssetPair const& tradingPair, std::map<Asset, uint64_t> const& prices) const; //smooth mult = 0
+
 
 };
 

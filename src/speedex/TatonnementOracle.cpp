@@ -12,8 +12,8 @@
 namespace stellar
 {
 
-TatonnementOracle::TatonnementOracle(IOCOrderbookManager const& orderbookManager, LiquidityPoolSetFrame const& liquidityPools)
-	: mDemandOracle(orderbookManager, liquidityPools)
+TatonnementOracle::TatonnementOracle(DemandOracle const& demandOracle)
+	: mDemandOracle(demandOracle)
 {}
 
 void 
@@ -21,9 +21,7 @@ TatonnementOracle::computePrices(TatonnementControlParams const& params, std::ma
 {
 	TatonnementControlParamsWrapper controlParams(params);
 
-
 	SupplyDemand baselineDemand = mDemandOracle.demandQuery(prices, controlParams.smoothMult());
-
 
 	TatonnementObjectiveFn baselineObjective = baselineDemand.getObjective();
 

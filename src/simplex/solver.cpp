@@ -157,7 +157,7 @@ TradeMaximizingSolver::doSolve() {
 }
 
 void 
-TradeMaximizingSolver::setUpperBound(AssetPair assetPair, int128_t upperBound)
+TradeMaximizingSolver::setUpperBound(AssetPair const& assetPair, int128_t upperBound)
 {
 	throwIfSolved();
 	auto yIdx = assetPairToVarIndex(assetPair);
@@ -294,7 +294,7 @@ TradeMaximizingSolver::multiplyRow(size_t rowIdx, int8_t coefficient) {
 }
 
 TradeMaximizingSolver::int128_t 
-TradeMaximizingSolver::getRowResult(AssetPair assetPair) const {
+TradeMaximizingSolver::getRowResult(AssetPair const& assetPair) const {
 	throwIfUnsolved();
 	auto pair = std::make_pair(mIndexMap.at(assetPair.selling), mIndexMap.at(assetPair.buying));
 	if (debugPrints)
@@ -421,5 +421,22 @@ TradeMaximizingSolver::printSolution() const
 		}
 	}
 }
+
+UnorderedMap<AssetPair, TradeMaximizingSolver::int128_t, AssetPairHash> 
+TradeMaximizingSolver::getSolution() const
+{
+
+	UnorderedMap<AssetPair, int128_t, AssetPairHash> out;
+	for (auto const& [tradingPair, _] : mAssetPairToRowMap)
+	{
+		auto amt = getRowResult(tradingPair);
+		if (amt > 0)
+		{
+			out[tradingPair] = amt;
+		}
+	}
+	return out;
+}
+
 
 } /* stellar */

@@ -28,7 +28,7 @@ class TatonnementOracle {
 
 public:
 
-	TatonnementOracle(IOCOrderbookManager const& orderbookManager, LiquidityPoolSetFrame const& liquidityPools);
+	TatonnementOracle(DemandOracle const& demandOracle);
 
 	TatonnementOracle(const TatonnementOracle&) = delete;
 	TatonnementOracle& operator=(const TatonnementOracle&) = delete;

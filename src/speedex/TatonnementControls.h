@@ -26,7 +26,7 @@ struct TatonnementControlParams
 	uint8_t mStepRadix;
 };
 
-class SupplyDemand;
+struct SupplyDemand;
 
 class TatonnementControlParamsWrapper
 {

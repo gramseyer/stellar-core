@@ -154,5 +154,16 @@ IOCOrderbookManager::demandQuery(
 	}
 }
 
+IOCOrderbookManager::int128_t 
+IOCOrderbookManager::demandQueryOneAssetPair(AssetPair const& tradingPair, std::map<Asset, uint64_t> const& prices) const
+{
+	auto iter = mOrderbooks.find(tradingPair);
+	if (iter == mOrderbooks.end()) {
+		return 0;
+	}
+	return iter->second.cumulativeOfferedForSaleTimesPrice(prices.at(tradingPair.selling), prices.at(tradingPair.buying), 0);
+}
+
+
 
 } /* stellar */
