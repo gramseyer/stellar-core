@@ -308,10 +308,6 @@ TransactionQueue::releaseFeeMaybeEraseAccountState(TransactionFrameBasePtr tx)
         {
             mAccountStates.erase(iter);
         }
-   //     if (iter->second.mTotalFees == 0)
-     //   {
-       //     mAccountStates.erase(iter);
-        //}
     }
 }
 

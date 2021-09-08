@@ -7,11 +7,22 @@ namespace stellar {
 class AbstractLedgerTxn;
 struct AssetPair;
 
-class LiquidityPoolFrame {
+struct BaseLiquidityPoolFrame {
 
 	using int128_t = __int128_t;
 
 	LedgerTxnEntry mEntry;
+
+	BaseLiquidityPoolFrame(AbstractLedgerTxn& ltx, AssetPair const& assetPair);
+	
+	operator bool() const;
+};
+
+class LiquidityPoolFrame {
+
+	using int128_t = __int128;
+
+	BaseLiquidityPoolFrame& mBaseFrame;
 
 	AssetPair const& mTradingPair;
 
@@ -32,7 +43,7 @@ public:
 	std::pair<uint64_t, uint64_t>
 	getMinPriceRatioFixedPoint() const;
 
-	LiquidityPoolFrame(AbstractLedgerTxn& ltx, AssetPair const& assetPair);
+	LiquidityPoolFrame(BaseLiquidityPoolFrame& baseFrame, AssetPair const& tradingPair);
 	
 	operator bool() const;
 
@@ -46,7 +57,6 @@ public:
 
 	int128_t 
 	amountOfferedForSaleTimesSellPrice(uint64_t sellPrice, uint64_t buyPrice) const;
-
 };
 
 } /* stellar */

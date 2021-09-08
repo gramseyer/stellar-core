@@ -92,7 +92,9 @@ TEST_CASE("lp trade amounts", "[speedex]")
     {
         createLiquidityPool(pair1.selling, pair1.buying, 1003, 1000, ltx);
 
-        LiquidityPoolFrame frame(ltx, pair1);
+        BaseLiquidityPoolFrame baseFrame(ltx, pair1);
+
+        LiquidityPoolFrame frame(baseFrame, pair1);
 
         auto [sell, buy] = frame.getSellBuyAmounts();
         REQUIRE(sell == 1003);
@@ -108,7 +110,9 @@ TEST_CASE("lp trade amounts", "[speedex]")
     {
     	createLiquidityPool(pair1.selling, pair1.buying, 1000, 1000, ltx, 0);
 
-    	LiquidityPoolFrame frame(ltx, pair1);
+    	BaseLiquidityPoolFrame baseFrame(ltx, pair1);
+
+        LiquidityPoolFrame frame(baseFrame, pair1);
     	
     	REQUIRE(frame.amountOfferedForSaleTimesSellPrice(25, 1) <= 25 * 800);
     	REQUIRE(frame.amountOfferedForSaleTimesSellPrice(1, 100) == 0);
@@ -121,8 +125,13 @@ TEST_CASE("lp trade amounts", "[speedex]")
         createLiquidityPool(pair1.selling, pair1.buying, 1000, 1000, ltx);
         createLiquidityPool(pair2.selling, pair2.buying, 200, 5000, ltx);
 
-        LiquidityPoolFrame frame1(ltx, pair1);
-        LiquidityPoolFrame frame2(ltx, pair2);
+        BaseLiquidityPoolFrame baseFrame1(ltx, pair1);
+
+        LiquidityPoolFrame frame1(baseFrame1, pair1);
+        
+        BaseLiquidityPoolFrame baseFrame2(ltx, pair2);
+
+        LiquidityPoolFrame frame2(baseFrame2, pair2);
 
         auto delta = frame1.amountOfferedForSaleTimesSellPrice(100, 1)
             - frame2.amountOfferedForSaleTimesSellPrice(100, 1);

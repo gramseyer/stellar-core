@@ -15,6 +15,8 @@ struct SupplyDemand;
 class LiquidityPoolSetFrame {
 	UnorderedMap<AssetPair, LiquidityPoolFrame, AssetPairHash> mLiquidityPools;
 
+	std::vector<BaseLiquidityPoolFrame> mBaseFrames;
+
 	using int128_t = __int128;
 
 public:

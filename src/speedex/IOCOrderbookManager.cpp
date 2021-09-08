@@ -81,7 +81,8 @@ IOCOrderbookManager::clear() { // no offer unwinding here b/c only called when l
 void 
 IOCOrderbookManager::clearOrderbook(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target) {
 	auto assetPair = target.getAssetPair();
-	auto lpFrame = LiquidityPoolFrame(ltx, assetPair);
+	auto baseFrame = BaseLiquidityPoolFrame(ltx, assetPair);
+	auto lpFrame = LiquidityPoolFrame(baseFrame, assetPair);
 	getOrCreateOrderbook(assetPair).clearOffers(ltx, target, lpFrame);
 }
 

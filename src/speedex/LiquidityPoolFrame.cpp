@@ -13,25 +13,35 @@
 
 namespace stellar {
 
-LiquidityPoolFrame::LiquidityPoolFrame(AbstractLedgerTxn& ltx, AssetPair const& assetPair)
-	: mTradingPair(assetPair)
+BaseLiquidityPoolFrame::BaseLiquidityPoolFrame(AbstractLedgerTxn& ltx, AssetPair const& assetPair)
 {
 	auto poolID = getPoolID(assetPair.selling, assetPair.buying);
 	mEntry = loadLiquidityPool(ltx, poolID) ;
 }
 
-LiquidityPoolFrame::operator bool() const {
+BaseLiquidityPoolFrame::operator bool() const {
 	return (bool) mEntry;
+}
+
+LiquidityPoolFrame::LiquidityPoolFrame(BaseLiquidityPoolFrame& baseFrame, AssetPair const& tradingPair)
+	: mBaseFrame(baseFrame)
+	, mTradingPair (tradingPair)
+{
+
+}
+
+LiquidityPoolFrame::operator bool() const {
+	return (bool) mBaseFrame;
 }
 
 std::pair<int64_t, int64_t> 
 LiquidityPoolFrame::getSellBuyAmounts() const {
-	if (!mEntry) {
+	if (!mBaseFrame.mEntry) {
 		return std::make_pair<int64_t, int64_t>(0, 0);
 	}
 
-	int64_t reserveA = mEntry.current().data.liquidityPool().body.constantProduct().reserveA;
-	int64_t reserveB = mEntry.current().data.liquidityPool().body.constantProduct().reserveB;
+	int64_t reserveA = mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveA;
+	int64_t reserveB = mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveB;
 
 	if (mTradingPair.selling < mTradingPair.buying) {
 		return {reserveA, reserveB};
@@ -42,19 +52,19 @@ LiquidityPoolFrame::getSellBuyAmounts() const {
 
 double
 LiquidityPoolFrame::getFeeRate() const {
-	if (!mEntry) {
+	if (!mBaseFrame) {
 		return 0.0;
 	}
-	return (((double) mEntry.current().data.liquidityPool().body.constantProduct().params.fee) / (10000.0));
+	return (((double) mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().params.fee) / (10000.0));
 }
 
 uint32_t
 LiquidityPoolFrame::getFixedPointFeeRate() const {
-	if (!mEntry) {
+	if (!mBaseFrame) {
 		std::printf("get fixed rate no fee\n");
 		return 0;
 	}
-	return mEntry.current().data.liquidityPool().body.constantProduct().params.fee;
+	return mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().params.fee;
 }
 
 uint64_t
@@ -247,18 +257,18 @@ LiquidityPoolFrame::assertValidTrade(int64_t sellAmount, int64_t buyAmount, uint
 void 
 LiquidityPoolFrame::doTransfer(int64_t sellAmount, int64_t buyAmount, uint64_t sellPrice, uint64_t buyPrice) {
 
-	if (!mEntry) {
+	if (!mBaseFrame) {
 		throw std::runtime_error("can't modify nonexistent lp");
 	}
 
 	assertValidTrade(sellAmount, buyAmount, sellPrice, buyPrice);
 
 	if (mTradingPair.selling < mTradingPair.buying) {
-		mEntry.current().data.liquidityPool().body.constantProduct().reserveA -= sellAmount;
-		mEntry.current().data.liquidityPool().body.constantProduct().reserveB += buyAmount;
+		mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveA -= sellAmount;
+		mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveB += buyAmount;
 	} else {
-		mEntry.current().data.liquidityPool().body.constantProduct().reserveB -= sellAmount;
-		mEntry.current().data.liquidityPool().body.constantProduct().reserveA += buyAmount;
+		mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveB -= sellAmount;
+		mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveA += buyAmount;
 	}
 }
 

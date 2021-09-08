@@ -76,7 +76,6 @@ AccountCommutativityRequirements::checkCanAddAssetRequirement(
 	return true;
 }
 
-
 bool
 AccountCommutativityRequirements::tryAddAssetRequirement(
 	AbstractLedgerTxn& ltx, Asset asset, int64_t amount)
@@ -110,26 +109,12 @@ AccountCommutativityRequirements::addAssetRequirement(
 
 	auto derefAmount = *amount;
 
-	/*if (derefAmount > 0 && *requirement > 0 && INT64_MAX - *requirement < derefAmount)
-	{
-		std::printf("wat amount %lld req %lld\n", derefAmount, *requirement);
-		requirement = std::nullopt;
-		return;
-	}
-	if (derefAmount < 0 && *requirement < 0 && INT64_MIN - *requirement > derefAmount)
-	{
-		std::printf("wat1 amount %lld req %lld\n", derefAmount, *requirement);
-		std::printf("check = %lld\n", *requirement - INT64_MIN);
-		requirement = std::nullopt;
-		return;
-	}*/
 	if (!satisfyNumericLimits(derefAmount, *requirement)) {
 		requirement = std::nullopt;
 		return;
 	}
 	if (requirement) {
 		*requirement += derefAmount;
-		//mRequiredAssets[asset] = ((*mRequiredAssets[asset]) + (*amount));
 		return;
 	}
 }
@@ -142,7 +127,7 @@ AccountCommutativityRequirements::checkAvailableBalanceSufficesForNewRequirement
 		std::printf("checkCanAddAssetRequirement fail\n");
 		return false;
 	}
-	auto& currentRequirement = getRequirement(asset);//mRequiredAssets[asset];
+	auto& currentRequirement = getRequirement(asset);
 
 	auto currentBalance = getAvailableBalance(header, ltx, mSourceAccount, asset);
 
