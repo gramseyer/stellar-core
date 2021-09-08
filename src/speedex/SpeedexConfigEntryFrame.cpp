@@ -6,6 +6,11 @@ namespace stellar {
 
 SpeedexConfigSnapshotFrame::SpeedexConfigSnapshotFrame(std::shared_ptr<const LedgerEntry> config)
 	: mSpeedexConfig(config) {
+		if (!config) {
+			mSpeedexConfig = nullptr;
+			return;
+		}
+
 		if (config -> data.type() != SPEEDEX_CONFIG) {
 			mSpeedexConfig = nullptr;
 		}

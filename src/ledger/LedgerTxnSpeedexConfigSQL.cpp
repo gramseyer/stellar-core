@@ -30,6 +30,8 @@ LedgerTxnRoot::Impl::loadSpeedexConfig(LedgerKey const& key) const
 
    // auto default_config = getDefaultSpeedexConfig();
 
+    std::printf("getting current default speedex config\n");
+
     
     return std::make_shared<LedgerEntry const>(currentSpeedexConfig);
 }

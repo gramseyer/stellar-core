@@ -56,7 +56,10 @@ IOCOrderbookManager::numOpenOrderbooks() const {
 void
 IOCOrderbookManager::commitChild(const IOCOrderbookManager& child) {
 	
-	child.throwIfAlreadyCleared();
+	if (numOpenOrderbooks() > 0)
+	{
+		child.throwIfAlreadyCleared();
+	}
 
 	if (child.numOpenOrderbooks() > 0) {
 		throwIfSealed();
@@ -162,10 +165,6 @@ IOCOrderbookManager::demandQuery(
 		auto tradeAmount = orderbook.cumulativeOfferedForSaleTimesPrice(sellPrice, buyPrice, smoothMult);
 
 		supplyDemand.addSupplyDemand(assetPair, tradeAmount);
-
-		//auto tax = taxRate == 0 ? 0 : tradeAmount >> taxRate;
-		//demandsOut[assetPair.buying] += (tradeAmount - tax); // demand is positive
-		//demandsOut[assetPair.selling] -= tradeAmount;
 	}
 }
 
@@ -178,7 +177,5 @@ IOCOrderbookManager::demandQueryOneAssetPair(AssetPair const& tradingPair, std::
 	}
 	return iter->second.cumulativeOfferedForSaleTimesPrice(prices.at(tradingPair.selling), prices.at(tradingPair.buying), 0);
 }
-
-
 
 } /* stellar */

@@ -1435,8 +1435,9 @@ std::shared_ptr<const LedgerEntry>
 LedgerTxn::Impl::loadSnapshotEntry(LedgerKey const& key) const
 {
     //maintain same access validity invariants on snapshots as on regular entries
+    //Does not check if there is a child -- child snapshots are the same as parent snapshots,
+    //as snapshots are not modified until root ledger commits.
     throwIfSealed();
-    throwIfChild();
 
     auto snapshotIter = mSnapshots.find(key);
     if (snapshotIter != mSnapshots.end()) {
@@ -3363,6 +3364,7 @@ LedgerTxnRoot::Impl::loadSnapshotEntry(LedgerKey const& key) const {
     {
         std::string zoneTxt("hit");
         ZoneText(zoneTxt.c_str(), zoneTxt.size());
+        std::printf("getting from cache\n");
         return getFromSnapshotCache(key);
     }
     else
@@ -3396,6 +3398,7 @@ LedgerTxnRoot::Impl::loadSnapshotEntry(LedgerKey const& key) const {
             entry = loadLiquidityPool(key);
             break;
         case SPEEDEX_CONFIG:
+            std::printf("loaded speedex config from db\n");
             entry = loadSpeedexConfig(key);
             break;
         default:

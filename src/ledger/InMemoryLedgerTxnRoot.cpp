@@ -163,6 +163,13 @@ InMemoryLedgerTxnRoot::prefetch(UnorderedSet<LedgerKey> const& keys)
 
 std::shared_ptr<const LedgerEntry>
 InMemoryLedgerTxnRoot::loadSnapshotEntry(LedgerKey const& key) const {
+
+    if (key.type() == SPEEDEX_CONFIG)
+    {
+        LedgerEntry out;
+        out.data.type(SPEEDEX_CONFIG);
+        return std::make_shared<const LedgerEntry>(out);
+    }
     return nullptr;
 }
 

@@ -11,6 +11,10 @@ namespace stellar
 
 LiquidityPoolSetFrame::LiquidityPoolSetFrame(std::vector<Asset> const& assets, AbstractLedgerTxn& ltx)
 {
+	size_t numLPBaseFrames = ((assets.size()) * (assets.size() - 1)) / 2;
+
+	mBaseFrames.reserve(numLPBaseFrames);
+
 	for (auto const& sellAsset : assets) {
 		for (auto const& buyAsset : assets) {
 			if (sellAsset < buyAsset) {
@@ -47,11 +51,6 @@ LiquidityPoolSetFrame::demandQuery(std::map<Asset, uint64_t> const& prices, Supp
 		auto sellAmountTimesPrice = lpFrame.amountOfferedForSaleTimesSellPrice(prices.at(tradingPair.selling), prices.at(tradingPair.buying));
 
 		supplyDemand.addSupplyDemand(tradingPair, sellAmountTimesPrice);
-
-//		auto tax = taxRate == 0 ? 0 : sellAmountTimesPrice >> taxRate;
-
-		//demands[tradingPair.selling] -= sellAmountTimesPrice;
-		//demands[tradingPair.buying] += (sellAmountTimesPrice - tax);
 	}
 }
 
