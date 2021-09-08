@@ -194,7 +194,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                 if ((!transactions.back().mTx -> isCommutativeTransaction())
                     && tx -> isCommutativeTransaction())
                 {
-                    std::printf("can't follow nc with c\n");
+                    // Can't follow a noncommutative tx with a commutative tx
                     return TransactionQueue::AddResult::ADD_STATUS_ERROR;
                 }
             }
@@ -242,7 +242,6 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
         ban({tx});
         if (canAddRes.second != 0)
         {
-            std::printf("queue limiter failed\n");
             tx->getResult().result.code(txINSUFFICIENT_FEE);
             tx->getResult().feeCharged = canAddRes.second;
             return TransactionQueue::AddResult::ADD_STATUS_ERROR;
@@ -257,7 +256,6 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
     if (!tx->checkValid(ltx, seqNum, 0,
                         getUpperBoundCloseTimeOffset(mApp, closeTime)))
     {
-        std::printf("checkValid error\n");
         return TransactionQueue::AddResult::ADD_STATUS_ERROR;
     }
 
@@ -266,14 +264,12 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
         if (!mCommutativityRequirements.tryReplaceTransaction(tx, oldTx, ltx))
         {
             tx->getResult().result.code(txINSUFFICIENT_BALANCE);
-            std::printf("tryReplace error\n");
             return TransactionQueue::AddResult::ADD_STATUS_ERROR;
         }
     } else {
         if (!mCommutativityRequirements.tryAddTransaction(tx, ltx))
         {
             tx->getResult().result.code(txINSUFFICIENT_BALANCE);
-            std::printf("fail tryAddTransaction\n");
             return TransactionQueue::AddResult::ADD_STATUS_ERROR;
         }
     }
@@ -327,12 +323,10 @@ TransactionQueue::prepareDropTransaction(AccountState& as, TimestampedTx& tstx)
 TransactionQueue::AddResult
 TransactionQueue::tryAdd(TransactionFrameBasePtr tx)
 {
-    CLOG_INFO(Herder, "start tryAdd");
     ZoneScoped;
     AccountStates::iterator stateIter;
     TimestampedTransactions::iterator oldTxIter;
     auto const res = canAdd(tx, stateIter, oldTxIter);
-    CLOG_INFO(Herder, "got {} from canAdd", res);
     if (res != TransactionQueue::AddResult::ADD_STATUS_PENDING)
     {
         return res;

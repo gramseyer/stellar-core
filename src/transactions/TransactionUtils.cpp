@@ -318,13 +318,6 @@ sponsorshipCounterKey(AccountID const& sponsoringID)
     return gkey;
 }
 
-//InternalLedgerKey
-//speedexIOCBatchKey()
-//{
-  //  InternalLedgerKey gkey(InternalLedgerEntryType::SPEEDEX_IOC_BATCH);
-  //  return gkey;
-//}
-
 LedgerTxnEntry
 loadAccount(AbstractLedgerTxn& ltx, AccountID const& accountID)
 {

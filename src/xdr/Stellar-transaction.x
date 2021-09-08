@@ -715,6 +715,8 @@ struct CommutativeTransactionEnvelope
 {
     CommutativeTransaction tx;
 
+    /* Each decorated signature is a signature over the SHA256 hash of
+     * a TransactionSignaturePayload */
     DecoratedSignature signatures<20>;
 };
 
@@ -741,7 +743,8 @@ struct TransactionSignaturePayload
         Transaction tx;
     case ENVELOPE_TYPE_TX_FEE_BUMP:
         FeeBumpTransaction feeBump;
-    //TODO wat is this
+    case ENVELOPE_TYPE_TX_COMMUTATIVE:
+        CommutativeTransaction commutativeTx;
     }
     taggedTransaction;
 };

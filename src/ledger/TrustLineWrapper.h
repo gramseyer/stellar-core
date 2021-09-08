@@ -55,8 +55,6 @@ class TrustLineWrapper
     // Just checks trustline settings, not asset settings
     bool isCommutativeTxEnabledTrustLine() const;
 
-    //bool issuerExists(AbstractLedgerTxn& ltx) const;
-
     int64_t getAvailableBalance(LedgerTxnHeader const& header) const;
 
     int64_t getMaxAmountReceive(LedgerTxnHeader const& header) const;
@@ -95,8 +93,6 @@ class TrustLineWrapper::AbstractImpl
     virtual bool isClawbackEnabled() const = 0;
 
     virtual bool isCommutativeTxEnabledTrustLine() const = 0;
-
-   // virtual bool issuerExists(AbstractLedgerTxn& ltx) const = 0;
 
     virtual int64_t
     getAvailableBalance(LedgerTxnHeader const& header) const = 0;

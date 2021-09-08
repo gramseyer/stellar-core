@@ -759,7 +759,6 @@ TEST_CASE("upgrade to version 10", "[upgrades]")
 
         SECTION("valid non-native issued by account")
         {
-            std::printf("starting bad section\n");
             auto a1 = root.create("A", lm.getLastMinBalance(4) + 4 * txFee);
             auto issuedCur1 = a1.asset("CUR1");
             auto issuedCur2 = a1.asset("CUR2");
@@ -769,7 +768,6 @@ TEST_CASE("upgrade to version 10", "[upgrades]")
             createOffer(a1, issuedCur1, issuedCur2, offers);
             createOffer(a1, issuedCur2, issuedCur1, offers);
             createOffer(a1, issuedCur2, issuedCur1, offers);
-            std::printf("created offers\n");
 
             market.requireChanges(offers, executeUpgrade);
         }

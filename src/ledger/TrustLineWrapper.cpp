@@ -37,7 +37,6 @@ class TrustLineWrapper::NonIssuerImpl : public TrustLineWrapper::AbstractImpl
     bool isAuthorizedToMaintainLiabilities() const override;
     bool isClawbackEnabled() const override;
     bool isCommutativeTxEnabledTrustLine() const override;
-    //bool issuerExists(AbstractLedgerTxn& ltx) const override;
 
     int64_t getAvailableBalance(LedgerTxnHeader const& header) const override;
 
@@ -71,7 +70,6 @@ class TrustLineWrapper::IssuerImpl : public TrustLineWrapper::AbstractImpl
     bool isAuthorizedToMaintainLiabilities() const override;
     bool isClawbackEnabled() const override;
     bool isCommutativeTxEnabledTrustLine() const override;
-   // bool issuerExists(AbstractLedgerTxn& ltx) const override;
 
     int64_t getAvailableBalance(LedgerTxnHeader const& header) const override;
 

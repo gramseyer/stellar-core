@@ -304,7 +304,6 @@ TxSetFrame::checkOrTrim(Application& app,
                         bool justCheck, uint64_t lowerBoundCloseTimeOffset,
                         uint64_t upperBoundCloseTimeOffset)
 {
-    std::printf("start checkOrTrim\n");
     ZoneScoped;
     LedgerTxn ltx(app.getLedgerTxnRoot());
 
@@ -323,7 +322,6 @@ TxSetFrame::checkOrTrim(Application& app,
             if (!tx->checkValid(ltx, lastSeq, lowerBoundCloseTimeOffset,
                                 upperBoundCloseTimeOffset))
             {
-                std::printf("individual tx failed a validity check\n");
                 if (justCheck)
                 {
                     CLOG_DEBUG(
@@ -348,7 +346,6 @@ TxSetFrame::checkOrTrim(Application& app,
                 if (tx -> isCommutativeTransaction() && foundNoncommutative) 
                 {
                     
-                    std::printf("wtf\n");
                     if (justCheck) 
                     {
                         CLOG_DEBUG(
@@ -366,7 +363,6 @@ TxSetFrame::checkOrTrim(Application& app,
                 }
 
                 if (!tx -> isCommutativeTransaction()) {
-                    std::printf("found noncommutative\n");
                     foundNoncommutative = true;
                 }
 
@@ -388,7 +384,6 @@ TxSetFrame::checkOrTrim(Application& app,
                 if (res) {
                     ++iter;
                 } else {
-                    std::printf("validateandAddTransaction failed\n");
                     if (justCheck) {
                         CLOG_DEBUG(
                             Herder,
@@ -418,7 +413,6 @@ TxSetFrame::checkOrTrim(Application& app,
             for (auto acct : relevantAccounts) {
                 //TODO cache results of this check
                 if (!reqs.checkAccountHasSufficientBalance(acct, ltx, header)) {
-                    std::printf("insufficient balance?\n");
                     if (justCheck) {
                         CLOG_DEBUG(
                             Herder,
@@ -508,12 +502,7 @@ TxSetFrame::removeTx(TransactionFrameBasePtr tx)
     auto it = std::find(mTransactions.begin(), mTransactions.end(), tx);
     if (it != mTransactions.end()) {
         mTransactions.erase(it);
-    } /*else {
-        std::printf("failed to remove a tx %p???\n", tx.get());
-        for (auto txHad : mTransactions) {
-            std::printf("had tx: %p\n", txHad.get());
-        }
-    }*/
+    }
     mHash.reset();
     mValid.reset();
 }
