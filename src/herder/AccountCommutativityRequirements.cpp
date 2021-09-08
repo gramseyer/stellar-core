@@ -8,6 +8,21 @@ namespace stellar
 
 // TODO cache balances and trustline checks?
 
+// is a+b within limits
+bool
+satisfyNumericLimits(int64_t a, int64_t b)
+{
+	if (a < 0 && b < 0 && INT64_MIN - a > b)
+	{
+		return false;
+	}
+	if (a > 0 && b > 0 && INT64_MAX - a < b)
+	{
+		return false;
+	}
+	return true;
+}
+
 bool
 AccountCommutativityRequirements::checkTrustLine(
 	AbstractLedgerTxn& ltx, Asset asset) const
@@ -26,14 +41,21 @@ AccountCommutativityRequirements::checkTrustLine(
 	return tl.isCommutativeTxEnabledTrustLine();
 }
 
+std::optional<int64_t>&
+AccountCommutativityRequirements::getRequirement(Asset const& asset)
+{
+	auto iter = mRequiredAssets.find(asset);
+	if (iter == mRequiredAssets.end()) {
+		mRequiredAssets.emplace(asset, 0);
+		iter = mRequiredAssets.find(asset);
+	}
+	return iter->second;
+}
+
 bool 
 AccountCommutativityRequirements::checkCanAddAssetRequirement(
-	AbstractLedgerTxn& ltx, Asset asset, int64_t amount) 
+	AbstractLedgerTxn& ltx, Asset const& asset, int64_t amount) 
 {
-
-	if (amount < 0) {
-		return false;
-	}
 
 	if (!checkTrustLine(ltx, asset)) {
 		return false;
@@ -43,9 +65,12 @@ AccountCommutativityRequirements::checkCanAddAssetRequirement(
 		return false;
 	}
 
-	auto const& currentRequirement = *mRequiredAssets[asset];
+	auto const& currentRequirement = getRequirement(asset);
+	if (!currentRequirement) {
+		return false;
+	}
 
-	if (INT64_MAX - currentRequirement < amount) {
+	if (!satisfyNumericLimits(amount, *currentRequirement)) {
 		return false;
 	}
 	return true;
@@ -60,11 +85,12 @@ AccountCommutativityRequirements::tryAddAssetRequirement(
 		return false;
 	}
 
-	auto& currentRequirement = *mRequiredAssets[asset];
+	auto& currentRequirement = *getRequirement(asset);
 
 	currentRequirement += amount;
 	return true;
 }
+
 void
 AccountCommutativityRequirements::addAssetRequirement(
 	Asset asset, std::optional<int64_t> amount)
@@ -77,18 +103,33 @@ AccountCommutativityRequirements::addAssetRequirement(
 		mRequiredAssets[asset] = std::nullopt;
 		return;
 	}
-	if (amount > 0 && INT64_MAX - *mRequiredAssets[asset] < amount)
-	{
-		mRequiredAssets[asset] = std::nullopt;
+	auto& requirement = getRequirement(asset);
+	if (!requirement) {
 		return;
 	}
-	if (amount < 0 && INT64_MIN - *mRequiredAssets[asset] > amount)
+
+	auto derefAmount = *amount;
+
+	/*if (derefAmount > 0 && *requirement > 0 && INT64_MAX - *requirement < derefAmount)
 	{
-		mRequiredAssets[asset] = std::nullopt;
+		std::printf("wat amount %lld req %lld\n", derefAmount, *requirement);
+		requirement = std::nullopt;
 		return;
 	}
-	if (mRequiredAssets[asset]) {
-		mRequiredAssets[asset] = ((*mRequiredAssets[asset]) + (*amount));
+	if (derefAmount < 0 && *requirement < 0 && INT64_MIN - *requirement > derefAmount)
+	{
+		std::printf("wat1 amount %lld req %lld\n", derefAmount, *requirement);
+		std::printf("check = %lld\n", *requirement - INT64_MIN);
+		requirement = std::nullopt;
+		return;
+	}*/
+	if (!satisfyNumericLimits(derefAmount, *requirement)) {
+		requirement = std::nullopt;
+		return;
+	}
+	if (requirement) {
+		*requirement += derefAmount;
+		//mRequiredAssets[asset] = ((*mRequiredAssets[asset]) + (*amount));
 		return;
 	}
 }
@@ -98,19 +139,25 @@ AccountCommutativityRequirements::checkAvailableBalanceSufficesForNewRequirement
 	LedgerTxnHeader& header, AbstractLedgerTxn& ltx, Asset asset, int64_t amount)
 {
 	if (!checkCanAddAssetRequirement(ltx, asset, amount)) {
+		std::printf("checkCanAddAssetRequirement fail\n");
 		return false;
 	}
-	auto& currentRequirement = mRequiredAssets[asset];
+	auto& currentRequirement = getRequirement(asset);//mRequiredAssets[asset];
 
 	auto currentBalance = getAvailableBalance(header, ltx, mSourceAccount, asset);
+
 
 	if (!currentRequirement) {
 		return false;
 	}
 
+	std::printf("curBal %lld curReq %lld amount %lld", currentBalance, *currentRequirement, amount);
+
 	if (amount + *currentRequirement <= currentBalance) {
+		std::printf("good result, return true\n");
 		return true;
 	}
+	std::printf("currentBalance was too small\n");
 	return false;
 }
 

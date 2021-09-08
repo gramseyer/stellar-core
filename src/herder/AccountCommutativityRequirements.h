@@ -26,7 +26,9 @@ class AccountCommutativityRequirements {
 	AssetMap mRequiredAssets;
 
 	bool checkCanAddAssetRequirement(
-		AbstractLedgerTxn& ltx, Asset asset, int64_t amount);
+		AbstractLedgerTxn& ltx, Asset const& asset, int64_t amount);
+
+	std::optional<int64_t>& getRequirement(Asset const& asset);
 
 
 public:

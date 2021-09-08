@@ -21,11 +21,14 @@ class IOCOrderbookManager {
 	UnorderedMap<AssetPair, IOCOrderbook, AssetPairHash> mOrderbooks;
 
 	bool mSealed;
+	bool mCleared;
 
 	void clearOrderbook(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target);
 
 	void throwIfSealed() const;
 	void throwIfNotSealed() const;
+
+	void throwIfAlreadyCleared() const;
 
 	IOCOrderbook&
 	getOrCreateOrderbook(AssetPair const& assetPair);
@@ -36,7 +39,7 @@ class IOCOrderbookManager {
 
 public:
 
-	IOCOrderbookManager() : mSealed(false) {}
+	IOCOrderbookManager() : mSealed(false), mCleared(false) {}
 
 	void addOffer(AssetPair const& assetPair, IOCOffer const& offer);
 
@@ -55,9 +58,10 @@ public:
 		SupplyDemand& supplyDemand,
 		uint8_t smoothMult) const;
 
-	int128_t demandQueryOneAssetPair(AssetPair const& tradingPair, std::map<Asset, uint64_t> const& prices) const; //smooth mult = 0
-
-
+	int128_t 
+	demandQueryOneAssetPair(
+		AssetPair const& tradingPair, 
+		std::map<Asset, uint64_t> const& prices) const; //smooth mult = 0
 };
 
 }

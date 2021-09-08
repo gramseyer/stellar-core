@@ -91,10 +91,114 @@ TEST_CASE("commutative payment tx set", "[txset][commutativity]")
     }
 }
 
+TEST_CASE("commutative txs in queue", "[speedex][herder]")
+{
+
+    Config cfg(getTestConfig());
+    cfg.LEDGER_PROTOCOL_VERSION = 17;
+    cfg.TESTING_UPGRADE_MAX_TX_SET_SIZE = 100;
+
+    VirtualClock clock;
+    Application::pointer app = createTestApplication(clock, cfg);
+
+    auto root = TestAccount::createRoot(*app);
+
+    const int64_t minBalance0 = app->getLedgerManager().getLastMinBalance(0);
+    const int64_t minBalance2 = app->getLedgerManager().getLastMinBalance(2);
+
+    auto baseTxFee = app -> getLedgerManager().getLastTxFee();
+
+    auto feedTx = [&](TransactionFramePtr tx) {
+        REQUIRE(app->getHerder().recvTransaction(tx) ==
+                TransactionQueue::AddResult::ADD_STATUS_PENDING);
+    };
+    auto feedBadTx = [&](TransactionFramePtr tx) {
+        REQUIRE(app->getHerder().recvTransaction(tx) !=
+                TransactionQueue::AddResult::ADD_STATUS_PENDING);
+    };
+
+    auto replacementFee = [](int prevFee) {
+        return prevFee * 10;
+    };
+
+    SECTION("xlm only tests")
+    {
+        auto senderReqs = 50 * baseTxFee;
+
+        auto paymentSource = root.create("src", 10000 + minBalance0 + senderReqs);
+        auto paymentReceiver = root.create("dest", 10000 + minBalance0);
+
+            
+
+        SECTION("one transaction good")
+        {
+            feedTx(paymentSource.commutativeTx({payment(paymentReceiver, 100)}));
+        }
+        SECTION("many transactions good")
+        {
+            for (size_t i = 0; i < 50; i++) {
+                feedTx(paymentSource.commutativeTx({payment(paymentReceiver, 100)}));
+            }
+        }
+        SECTION("too much xlm spend")
+        {
+            for (size_t i = 0; i < 50; i++) {
+                feedTx(paymentSource.commutativeTx({payment(paymentReceiver, 100)}));
+            }
+            feedBadTx(paymentSource.commutativeTx({payment(paymentReceiver, 5000)}));
+
+        }
+        SECTION("only commutative txs get preconditions")
+        {
+            feedTx(paymentSource.commutativeTx({payment(paymentReceiver, 10000)}));
+            feedTx(paymentSource.tx({payment(paymentReceiver, 100000)}));
+        }
+
+     /*   SECTION("replace good")
+        {
+            auto tx1 = paymentSource.commutativeTx({payment(paymentReceiver, 10000 + 48 * baseTxFee)});
+            auto tx1r = paymentSource.commutativeTx(
+                {payment(paymentReceiver, 5000)},
+                paymentSource.getLastSequenceNumber(),
+                replacementFee(tx1->getFeeBid()));
+
+            auto tx2 = paymentSource.commutativeTx({payment(paymentReceiver, 4000)});
+
+            feedTx(tx1);
+
+            SECTION("tx2 didn't work before replace")
+            {
+                feedBadTx(tx2);
+            }
+            SECTION("tx2 works after replace")
+            {
+                feedTx(tx1r);
+                feedTx(tx2);
+            }
+        }
+        SECTION("replace bad")
+        {
+            auto tx1 = paymentSource.commutativeTx({payment(paymentReceiver, 10000)});
+            auto tx2 = paymentSource.commutativeTx({payment(paymentReceiver, 100000)}, 
+                paymentSource.getLastSequenceNumber(),
+                replacementFee(tx1->getFeeBid()));
+            feedTx(tx1);
+            feedBadTx(tx2);
+        } */
+
+        SECTION("comm can't follow noncomm")
+        {
+            feedTx(paymentSource.tx({payment(paymentReceiver, 1)}));
+            feedBadTx(paymentSource.commutativeTx({payment(paymentReceiver, 1)}));
+        }
+    }
+
+
+}
 /*
 Attempt to overflow int64_t when checking validity of txset
 */
-TEST_CASE("txset requirements overflows")
+TEST_CASE("txset requirements overflows", "[speedex][herder]")
 {
 	Config cfg(getTestConfig());
 	cfg.LEDGER_PROTOCOL_VERSION = 17;

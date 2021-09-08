@@ -3,6 +3,7 @@
 #include "speedex/IOCOffer.h"
 #include "speedex/IOCOrderbookManager.h"
 
+#include "speedex/DemandOracle.h"
 #include "speedex/TatonnementOracle.h"
 #include "speedex/TatonnementControls.h"
 
@@ -88,7 +89,9 @@ TEST_CASE("small 2-asset tatonnement run", "[speedex][tatonnement]")
 		.mStepRadix = 65
 	};
 
-	TatonnementOracle oracle(manager, lpFrame);
+	DemandOracle demandOracle(manager, lpFrame);
+
+	TatonnementOracle oracle(demandOracle);
 
 	std::map<Asset, uint64_t> prices;
 	prices[assets[0]] = 100000;

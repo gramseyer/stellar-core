@@ -190,6 +190,13 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                 }
 
                 seqNum = transactions.back().mTx->getSeqNum();
+
+                if ((!transactions.back().mTx -> isCommutativeTransaction())
+                    && tx -> isCommutativeTransaction())
+                {
+                    std::printf("can't follow nc with c\n");
+                    return TransactionQueue::AddResult::ADD_STATUS_ERROR;
+                }
             }
             else
             {
@@ -216,7 +223,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
                         return TransactionQueue::AddResult::ADD_STATUS_ERROR;
                     }
 
-                  //  oldTx = oldTxIter->mTx;
+                    oldTx = oldTxIter->mTx;
                     //int64_t oldFee = oldTx->getFeeBid();
                     //if (oldTx->getFeeSourceID() == tx->getFeeSourceID())
                    // {
@@ -235,6 +242,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
         ban({tx});
         if (canAddRes.second != 0)
         {
+            std::printf("queue limiter failed\n");
             tx->getResult().result.code(txINSUFFICIENT_FEE);
             tx->getResult().feeCharged = canAddRes.second;
             return TransactionQueue::AddResult::ADD_STATUS_ERROR;
@@ -249,6 +257,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
     if (!tx->checkValid(ltx, seqNum, 0,
                         getUpperBoundCloseTimeOffset(mApp, closeTime)))
     {
+        std::printf("checkValid error\n");
         return TransactionQueue::AddResult::ADD_STATUS_ERROR;
     }
 
@@ -257,12 +266,14 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
         if (!mCommutativityRequirements.tryReplaceTransaction(tx, oldTx, ltx))
         {
             tx->getResult().result.code(txINSUFFICIENT_BALANCE);
+            std::printf("tryReplace error\n");
             return TransactionQueue::AddResult::ADD_STATUS_ERROR;
         }
     } else {
         if (!mCommutativityRequirements.tryAddTransaction(tx, ltx))
         {
             tx->getResult().result.code(txINSUFFICIENT_BALANCE);
+            std::printf("fail tryAddTransaction\n");
             return TransactionQueue::AddResult::ADD_STATUS_ERROR;
         }
     }

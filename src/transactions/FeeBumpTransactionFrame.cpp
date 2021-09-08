@@ -356,8 +356,7 @@ FeeBumpTransactionFrame::getSourceID() const
 bool 
 FeeBumpTransactionFrame::isCommutativeTransaction() const 
 {
-    return false;
-    //TODO feebump on a commutative envelope is ok
+    return mInnerTx -> isCommutativeTransaction();
 }
 
 bool 
@@ -366,11 +365,31 @@ FeeBumpTransactionFrame::commutativityWellFormednessChecks() const
     return mInnerTx -> commutativityWellFormednessChecks();
 }
 
+void
+FeeBumpTransactionFrame::addFeeCommutativityRequirement(TransactionCommutativityRequirements& reqs) const
+{
+    auto nativeAsset = getNativeAsset();
+    reqs.addAssetRequirement(getFeeSourceID(), nativeAsset, getFeeBid());
+}
+
+std::optional<TransactionCommutativityRequirements>
+FeeBumpTransactionFrame::getCommutativityRequirementsNoFees(AbstractLedgerTxn& ltx) const
+{
+    return mInnerTx -> getCommutativityRequirementsNoFees(ltx);
+}
+
 std::optional<TransactionCommutativityRequirements>
 FeeBumpTransactionFrame::getCommutativityRequirements(AbstractLedgerTxn& ltx) const
 {
-    //TODO get results from within feeBump tx
-    return std::nullopt;
+    auto reqs = getCommutativityRequirementsNoFees(ltx);
+    if (!reqs)
+    {
+        return std::nullopt;
+    }
+
+    addFeeCommutativityRequirement(*reqs);
+
+    return reqs;
 }
 
 UnorderedSet<AccountID>

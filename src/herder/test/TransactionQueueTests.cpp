@@ -1443,3 +1443,5 @@ TEST_CASE("remove applied", "[herder][transactionqueue]")
             TransactionQueue::AddResult::ADD_STATUS_PENDING);
     REQUIRE(tq.toTxSet({})->mTransactions.size() == 2);
 }
+
+

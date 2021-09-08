@@ -25,4 +25,5 @@ TransactionFrameBase::makeTransactionFromWire(Hash const& networkID,
         abort();
     }
 }
+
 }

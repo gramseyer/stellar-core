@@ -187,15 +187,38 @@ TransactionFrame::getFeeBid() const
     }
 }
 
+void 
+TransactionFrame::addFeeCommutativityRequirement(TransactionCommutativityRequirements& reqs) const
+{
+    auto nativeAsset = getNativeAsset();
+    reqs.addAssetRequirement(getFeeSourceID(), nativeAsset, getFeeBid());
+}
+
+std::optional<TransactionCommutativityRequirements>
+TransactionFrame::getCommutativityRequirementsNoFees(AbstractLedgerTxn& ltx) const
+{
+    TransactionCommutativityRequirements reqs;
+
+    if (isCommutativeTransaction())
+    {
+        for (const auto& op : getOperations()) {
+            if (!op->addCommutativityRequirements(ltx, reqs)) {
+                return std::nullopt;
+            }
+        }
+    }
+    return reqs;
+}
+
 std::optional<TransactionCommutativityRequirements>
 TransactionFrame::getCommutativityRequirements(AbstractLedgerTxn& ltx) const
 {
-    TransactionCommutativityRequirements reqs;
-    for (const auto& op : getOperations()) {
-        if (!op->addCommutativityRequirements(ltx, reqs)) {
-            return std::nullopt;
-        }
+    auto reqs = getCommutativityRequirementsNoFees(ltx);
+    if (!reqs) {
+        return std::nullopt;
     }
+    addFeeCommutativityRequirement(*reqs);
+
     return reqs;
 }
 

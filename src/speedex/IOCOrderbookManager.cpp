@@ -26,6 +26,15 @@ IOCOrderbookManager::throwIfNotSealed() const {
 }
 
 void
+IOCOrderbookManager::throwIfAlreadyCleared() const
+{
+	if (mCleared)
+	{
+		throw std::runtime_error("manager has already been cleared! (must do clearing on base layer ledgertxn)");
+	}
+}
+
+void
 IOCOrderbookManager::doPriceComputationPreprocessing() {
 	for (auto & [_, orderbook] : mOrderbooks)
 	{
@@ -46,6 +55,9 @@ IOCOrderbookManager::numOpenOrderbooks() const {
 
 void
 IOCOrderbookManager::commitChild(const IOCOrderbookManager& child) {
+	
+	child.throwIfAlreadyCleared();
+
 	if (child.numOpenOrderbooks() > 0) {
 		throwIfSealed();
 		for (const auto& orderbook : child.mOrderbooks) {
@@ -106,6 +118,7 @@ void IOCOrderbookManager::returnToSource(AbstractLedgerTxn& ltx, Asset asset, in
 void 
 IOCOrderbookManager::clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& solution) {
 	throwIfNotSealed();
+	throwIfAlreadyCleared();
 
 	auto orderbookTargets = solution.produceClearingTargets();
 
@@ -130,6 +143,7 @@ IOCOrderbookManager::clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& sol
 		returnToSource(ltx, asset, roundingError);
 	}
 	mOrderbooks.clear();
+	mCleared = true;
 }
 
 void 

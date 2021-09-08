@@ -26,12 +26,7 @@
 #include "main/Config.h"
 #include "main/ErrorMessages.h"
 #include "overlay/OverlayManager.h"
-#include "simplex/solver.h"
-#include "speedex/DemandOracle.h"
-#include "speedex/LiquidityPoolSetFrame.h"
-#include "speedex/TatonnementControls.h"
-#include "speedex/TatonnementOracle.h"
-#include "speedex/SpeedexConfigEntryFrame.h"
+#include "speedex/speedex.h"
 #include "transactions/OperationFrame.h"
 #include "transactions/TransactionSQL.h"
 #include "transactions/TransactionUtils.h"
@@ -1128,36 +1123,6 @@ LedgerManagerImpl::applyTransaction(
         storeTransaction(mApp.getDatabase(), ledgerSeq, tx, tm,
                          txResultSet);
     }
-}
-
-void
-LedgerManagerImpl::runSpeedex(
-    AbstractLedgerTxn& ltx)
-{
-    auto& speedexOrderbooks = ltx.getSpeedexIOCOffers();
-    speedexOrderbooks.sealBatch();
-
-    auto speedexConfig = loadSpeedexConfigSnapshot(ltx);
-
-    LiquidityPoolSetFrame liquidityPools(speedexConfig.getAssets(), ltx);
-
-
-    DemandOracle demandOracle(speedexOrderbooks, liquidityPools);
-
-    TatonnementOracle oracle(demandOracle);
-
-    TatonnementControlParams controls = speedexConfig.getControls();
-    std::map<Asset, uint64_t> prices = speedexConfig.getStartingPrices();
-
-    oracle.computePrices(controls, prices);
-
-    TradeMaximizingSolver solver(speedexConfig.getAssets());
-
-    demandOracle.setSolverUpperBounds(solver, prices);
-
-    BatchSolution solution(solver.getSolution(), prices);
-
-    speedexOrderbooks.clearBatch(ltx, solution);
 }
 
 void

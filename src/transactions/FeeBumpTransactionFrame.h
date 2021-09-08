@@ -88,6 +88,11 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
     bool isCommutativeTransaction() const override;
     bool commutativityWellFormednessChecks() const override;
 
+    void addFeeCommutativityRequirement(TransactionCommutativityRequirements& reqs) const;
+
+    std::optional<TransactionCommutativityRequirements>
+    getCommutativityRequirementsNoFees(AbstractLedgerTxn& ltx) const override;
+
     std::optional<TransactionCommutativityRequirements>
     getCommutativityRequirements(AbstractLedgerTxn& ltx) const override;
 
