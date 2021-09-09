@@ -5,7 +5,7 @@
 using namespace stellar;
 using namespace stellar::txtest;
 
-TEST_CASE("orderbook against lp", "[speedexsim]")
+TEST_CASE("sim orderbooks against lp", "[speedexsim]")
 {
-	
+
 }

@@ -1,11 +1,11 @@
 #pragma once
 
 #include "ledger/LedgerTxnEntry.h"
+#include "ledger/AssetPair.h"
 
 namespace stellar {
 
 class AbstractLedgerTxn;
-struct AssetPair;
 
 struct BaseLiquidityPoolFrame {
 
@@ -24,7 +24,7 @@ class LiquidityPoolFrame {
 
 	BaseLiquidityPoolFrame& mBaseFrame;
 
-	AssetPair const& mTradingPair;
+	AssetPair mTradingPair;
 
 	double getFeeRate() const;
 

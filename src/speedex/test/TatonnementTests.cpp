@@ -24,74 +24,10 @@
 
 #include <map>
 
+#include "speedex/test/TatonnementTestUtils.h"
+
 using namespace stellar;
 using namespace stellar::txtest;
-
-static std::vector<Asset> makeAssets(size_t numAssets)
-{
-	auto acct = getAccount("asdf");
-
-	std::vector<Asset> out;
-
-	for (auto i = 0u; i < numAssets; i++)
-	{
-		out.push_back(makeAsset(acct, fmt::format("A{}", i)));
-	}
-
-	return out;
-}
-
-static void createLiquidityPool(Asset const& sell, Asset const& buy, int64_t sellAmount, int64_t buyAmount, AbstractLedgerTxn& ltx, int32_t fee = LIQUIDITY_POOL_FEE_V18)
-{
-	PoolID id = getPoolID(sell, buy);
-
-	LedgerEntry lpEntry;
-    lpEntry.data.type(LIQUIDITY_POOL);
-    auto& lp = lpEntry.data.liquidityPool();
-    lp.liquidityPoolID = id;
-    lp.body.type(LIQUIDITY_POOL_CONSTANT_PRODUCT);
-
-    auto &constProd = lp.body.constantProduct();
-
-
-    auto& params = constProd.params;
-    params.fee = fee;
-
-  	if (sell < buy) {
-  		params.assetA = sell;
-  		params.assetB = buy;
-
-  		constProd.reserveA = sellAmount;
-  		constProd.reserveB = buyAmount;
-  	} 
-  	else
-  	{
-  		params.assetA = buy;
-  		params.assetB = sell;
-
-  		constProd.reserveA = buyAmount;
-  		constProd.reserveB = sellAmount;
-  	}
-
-    ltx.create(lpEntry);
-}
-
-static void addOffer(AbstractLedgerTxn& ltx, int32_t p_n, int32_t p_d, int64_t amount, Asset const& sell, Asset const& buy, uint64_t idx)
-{
-	Price p;
-	p.n = p_n;
-	p.d = p_d;
-
-	AccountID acct = getAccount("blah").getPublicKey();
-
-	IOCOffer offer(amount, p, acct, idx, 0);
-
-	AssetPair tradingPair {
-		.selling = sell,
-		.buying = buy
-	};
-	ltx.addSpeedexIOCOffer(tradingPair, offer);
-}
 
 TEST_CASE("small 2-asset tatonnement run", "[speedex][tatonnement]")
 {
@@ -106,9 +42,11 @@ TEST_CASE("small 2-asset tatonnement run", "[speedex][tatonnement]")
 
 	LiquidityPoolSetFrame lpFrame({}, ltx);
 
+
+	auto acct = getAccount("blah").getPublicKey();
 	for (int32_t i = 90; i < 110; i++) {
-		addOffer(ltx, i, 100, 1000, assets[0], assets[1], i);
-		addOffer(ltx, i, 100, 1000, assets[1], assets[0], i+100);
+		addOffer(ltx, acct, i, 100, 1000, assets[0], assets[1], i);
+		addOffer(ltx, acct, i, 100, 1000, assets[1], assets[0], i+100);
 	}
 
 	auto& manager = ltx.getSpeedexIOCOffers();
@@ -152,8 +90,10 @@ TEST_CASE("trade offers against a liquidity pool", "[speedex][tatonnement]")
 
 	createLiquidityPool(assets[0], assets[1], 1000, 1000, ltx);
 
+	auto acct = getAccount("blah").getPublicKey();
+
 	for (int32_t i = 90; i < 110; i++) {
-		addOffer(ltx, i, 100, 1000, assets[0], assets[1], i);
+		addOffer(ltx, acct, i, 100, 1000, assets[0], assets[1], i);
 	}
 
 	LiquidityPoolSetFrame lpFrame(assets, ltx);

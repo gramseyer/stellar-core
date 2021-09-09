@@ -1,6 +1,5 @@
 #include "speedex/LiquidityPoolFrame.h"
 
-#include "ledger/AssetPair.h"
 #include "ledger/LedgerTxn.h"
 
 #include "transactions/TransactionUtils.h"
@@ -228,6 +227,12 @@ LiquidityPoolFrame::amountOfferedForSale(uint64_t sellPrice, uint64_t buyPrice) 
 
 void 
 LiquidityPoolFrame::assertValidSellAmount(int64_t sellAmount, uint64_t sellPrice, uint64_t buyPrice) const {
+	
+	std::printf("sellPrice %llu buyPrice %llu amountOfferedForSale %lld sellAmount %lld\n",
+			sellPrice,
+			buyPrice,
+			amountOfferedForSale(sellPrice, buyPrice),
+			sellAmount);
 	if (sellAmount > amountOfferedForSale(sellPrice, buyPrice)) {
 		throw std::runtime_error("invalid sell amount!");
 	}
@@ -255,8 +260,9 @@ LiquidityPoolFrame::assertValidTrade(int64_t sellAmount, int64_t buyAmount, uint
 }
 
 SpeedexLiquidityPoolClearingStatus 
-LiquidityPoolFrame::doTransfer(int64_t sellAmount, int64_t buyAmount, uint64_t sellPrice, uint64_t buyPrice) {
-
+LiquidityPoolFrame::doTransfer(int64_t sellAmount, int64_t buyAmount, uint64_t sellPrice, uint64_t buyPrice)
+{
+	std::printf("doing an lp transfer sellAmount %lld buyAmount %lld\n", sellAmount, buyAmount);
 	if (!mBaseFrame) {
 		throw std::runtime_error("can't modify nonexistent lp");
 	}

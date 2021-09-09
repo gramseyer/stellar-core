@@ -430,6 +430,8 @@ TradeMaximizingSolver::getSolution() const
 	for (auto const& [tradingPair, _] : mAssetPairToRowMap)
 	{
 		auto amt = getRowResult(tradingPair);
+
+		std::printf("amt: %lld\n", amt);
 		if (amt > 0)
 		{
 			out[tradingPair] = amt;

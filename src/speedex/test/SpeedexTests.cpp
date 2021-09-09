@@ -2,6 +2,20 @@
 
 #include "speedex/test/TatonnementTestUtils.h"
 
+#include "ledger/LedgerTxn.h"
+
+#include "main/Application.h"
+#include "main/Config.h"
+
+#include "speedex/speedex.h"
+
+#include "test/TestAccount.h"
+#include "test/TestUtils.h"
+#include "test/test.h"
+#include "test/TxTests.h"
+
+#include "transactions/TransactionUtils.h"
+
 using namespace stellar;
 using namespace stellar::txtest;
 
@@ -13,41 +27,113 @@ TEST_CASE("orderbook against lp", "[speedex]")
 	cfg.LEDGER_PROTOCOL_VERSION = 17;
     VirtualClock clock;
     Application::pointer app = createTestApplication(clock, cfg);
-    LedgerTxn ltx(app->getLedgerTxnRoot());
 
-	auto assets = makeAssets(2);
+    PoolID poolID;
 
-	auto poolID = createLiquidityPool(assets[0], assets[1], 1000, 1000, ltx);
+    auto root = TestAccount::createRoot(*app);
 
-	auto acct = getAccount("blah").getPublicKey();
+    auto issuer = getIssuanceLimitedAccount(root, "issuer", app->getLedgerManager().getLastMinBalance(2));
 
-	for (int32_t i = 90; i < 110; i++) {
-		addOffer(ltx, acct, i, 100, 1000, assets[0], assets[1], i);
-	}
+    auto trader = root.create("trader", app -> getLedgerManager().getLastMinBalance(10));
 
-	auto res = runSpeedex(ltx);
+    auto assets = makeAssets(2, issuer);
 
-	auto lpRes = findLPClearingStatus(res, poolID);
+    setNonIssuerTrustlines(trader, assets);
 
-	REQUIRE((bool) lpRes);
+    fundTrader(trader, issuer, assets);
 
-	auto numOffersCrossed = std::ceil((double) (*lpRes).boughtAmount / (double) 1000);
+    SECTION("small lp")
+    {
 
-	REQUIRE(numOffersCrossed >= 1);
-	REQUIRE(res.offerStatuses.size() == numOffersCrossed);
+	    {
+		    LedgerTxn ltx(app->getLedgerTxnRoot());
 
-	for (int32_t i = 90; i < 90 + numOffersCrossed; i++) {
-		auto offerRes = findOfferClearingStatus(res, acct, i, 0);
+			poolID = createLiquidityPool(assets[0], assets[1], 1000, 1000, ltx);
 
-		REQUIRE((bool) offerRes);
+			setSpeedexAssets(ltx, assets);
 
-		if (i != 90 + numOffersCrossed - 1)
-		{
-			REQUIRE(*offerRes.soldAmount == 1000);
-		} else
-		{
-			REQUIRE(*offerRes.soldAmount >= (*lpRes).boughtAmount % 1000);
+			ltx.commit();
+		}
+
+		LedgerTxn ltx(app -> getLedgerTxnRoot());
+
+		auto acct = trader.getPublicKey();
+
+
+		for (int32_t i = 90; i < 110; i++) {
+			addOffer(ltx, acct, i, 100, 1000, assets[0], assets[1], i);
+		}
+
+		auto res = runSpeedex(ltx);
+
+		auto lpRes = findLPClearingStatus(res, poolID);
+
+		REQUIRE((bool) lpRes);
+
+		auto numOffersCrossed = std::ceil((double) (*lpRes).boughtAmount / (double) 1000);
+
+		REQUIRE(numOffersCrossed >= 1);
+		REQUIRE(res.offerStatuses.size() == numOffersCrossed);
+
+		for (int32_t i = 90; i < 90 + numOffersCrossed; i++) {
+			auto offerRes = findOfferClearingStatus(res, acct, i, 0);
+
+			REQUIRE((bool) offerRes);
+
+			if (i != 90 + numOffersCrossed - 1)
+			{
+				REQUIRE((*offerRes).soldAmount == 1000);
+			} else
+			{
+				REQUIRE((*offerRes).soldAmount >= (*lpRes).boughtAmount % 1000);
+			}
 		}
 	}
+	SECTION("large lp")
+	{
+		{
+		    LedgerTxn ltx(app->getLedgerTxnRoot());
 
+			poolID = createLiquidityPool(assets[0], assets[1], 100000, 100000, ltx);
+
+			setSpeedexAssets(ltx, assets);
+
+			ltx.commit();
+		}
+
+		LedgerTxn ltx(app -> getLedgerTxnRoot());
+
+		auto acct = trader.getPublicKey();
+
+
+		for (int32_t i = 90; i < 110; i++) {
+			addOffer(ltx, acct, i, 100, 1000, assets[0], assets[1], i);
+		}
+
+		auto res = runSpeedex(ltx);
+
+		auto lpRes = findLPClearingStatus(res, poolID);
+
+		REQUIRE((bool) lpRes);
+
+		auto numOffersCrossed = std::ceil((double) (*lpRes).boughtAmount / (double) 1000);
+
+		REQUIRE(numOffersCrossed >= 1);
+		REQUIRE(numOffersCrossed <= 11);
+		REQUIRE(res.offerStatuses.size() == numOffersCrossed);
+
+		for (int32_t i = 90; i < 90 + numOffersCrossed; i++) {
+			auto offerRes = findOfferClearingStatus(res, acct, i, 0);
+
+			REQUIRE((bool) offerRes);
+
+			if (i != 90 + numOffersCrossed - 1)
+			{
+				REQUIRE((*offerRes).soldAmount == 1000);
+			} else
+			{
+				REQUIRE((*offerRes).soldAmount >= (*lpRes).boughtAmount % 1000);
+			}
+		}
+	}
 }

@@ -74,12 +74,15 @@ IOCOrderbook::commitChild(const IOCOrderbook& other) {
 std::pair<std::vector<SpeedexOfferClearingStatus>, std::optional<SpeedexLiquidityPoolClearingStatus>>
 IOCOrderbook::clearOffers(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target, LiquidityPoolFrame& lpFrame) {
 
+
+	std::printf("starting clear offers\n");
 	throwIfCleared();
 
 	std::vector<SpeedexOfferClearingStatus> out;
 
 	for (auto iter = mOffers.begin(); iter != mOffers.end(); iter++) {
 		if (!target.doneClearing()) {
+			std::printf("clearing an offer\n");
 			out.push_back(target.clearOffer(ltx, *iter));
 		} else
 		{
@@ -90,12 +93,15 @@ IOCOrderbook::clearOffers(AbstractLedgerTxn& ltx, OrderbookClearingTarget& targe
 	std::optional<SpeedexLiquidityPoolClearingStatus> lpRes = std::nullopt;
 
 	if (!target.doneClearing() && lpFrame) {
+		std::printf("finishing with lp\n");
 		lpRes = target.finishWithLiquidityPool(ltx, lpFrame);
 	}
 	if (!target.doneClearing()) {
 		throw std::runtime_error("invalid trade amounts!");
 	}
 	mCleared = true;
+
+	std::printf("done clearing\n");
 
 	return {out, lpRes};
 }

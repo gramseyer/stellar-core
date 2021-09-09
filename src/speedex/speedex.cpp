@@ -32,9 +32,17 @@ runSpeedex(AbstractLedgerTxn& ltx)
 
     oracle.computePrices(controls, prices);
 
+    std::printf("PRICES\n");
+    for (auto const& [asset, price] : prices)
+    {
+        std::printf("%llu\n", price);
+    }
+
     TradeMaximizingSolver solver(speedexConfig.getAssets());
 
     demandOracle.setSolverUpperBounds(solver, prices);
+
+    solver.doSolve();
 
     BatchSolution solution(solver.getSolution(), prices);
 

@@ -30,6 +30,16 @@ LiquidityPoolSetFrame::LiquidityPoolSetFrame(std::vector<Asset> const& assets, A
 				};
 
 				mBaseFrames.emplace_back(ltx, pair1);
+				if (mBaseFrames.size() > numLPBaseFrames) {
+					throw std::runtime_error("overflow base frames!");
+				}
+
+				//LiquidityPoolFrame pool1(mBaseFrames.back(), pair1);
+				//mLiquidityPools.emplace(pair1, pool1);
+
+
+				//LiquidityPoolFrame pool2(mBaseFrames.back(), pair1);
+				//mLiquidityPools.emplace(pair2, pool2);
 
 				mLiquidityPools.emplace(std::piecewise_construct,
 					std::forward_as_tuple(pair1),

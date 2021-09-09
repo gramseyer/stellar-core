@@ -235,6 +235,7 @@ bool
 TrustLineWrapper::NonIssuerImpl::addBalance(LedgerTxnHeader const& header,
                                             int64_t delta)
 {
+    std::printf("calling nonIssuerImpl addBalance\n");
     return stellar::addBalance(header, mEntry, delta);
 }
 

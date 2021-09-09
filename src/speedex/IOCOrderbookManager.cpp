@@ -47,7 +47,14 @@ IOCOrderbookManager::doPriceComputationPreprocessing() {
 
 IOCOrderbook&
 IOCOrderbookManager::getOrCreateOrderbook(AssetPair const& assetPair) {
-	return (mOrderbooks.emplace(assetPair, assetPair).first->second);
+
+	auto iter = mOrderbooks.find(assetPair);
+	if (iter == mOrderbooks.end()) {
+		std::printf("creating an orderbook\n");
+		iter = mOrderbooks.emplace(assetPair, assetPair).first;
+	}
+	return iter -> second;
+	//return (mOrderbooks.emplace(assetPair, assetPair).first->second);
 }
 
 size_t
@@ -134,6 +141,11 @@ IOCOrderbookManager::clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& sol
 
 	auto orderbookTargets = solution.produceClearingTargets();
 
+	for (auto const& target: orderbookTargets)
+	{
+		target.print();
+	}
+
 	for (auto& target : orderbookTargets) {
 		auto& lpFrame = liquidityPools.getFrame(target.getAssetPair());
 		auto [offerResults, lpResults] = clearOrderbook(ltx, target, lpFrame);
@@ -151,6 +163,8 @@ IOCOrderbookManager::clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& sol
 	}
 	for (auto& target : orderbookTargets) {
 		auto assetPair = target.getAssetPair();
+
+		std::printf("realized sell %lld buy %lld\n", target.getRealizedSellAmount(), target.getRealizedBuyAmount());
 		roundingErrors[assetPair.selling] += target.getRealizedSellAmount();
 		roundingErrors[assetPair.buying] -= target.getRealizedBuyAmount();
 	}

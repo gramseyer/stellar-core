@@ -24,15 +24,14 @@ class OrderbookClearingTarget {
 
 	bool checkPrice(const IOCOffer& offer);
 
-
-	//bool offerWouldClearFully(const IOCOffer& offer) const;
-
-
 	int64_t getSellAmount(int128_t amountTimesPrice) const;
 	int64_t getBuyAmount(int128_t amountTimesPrice) const;
 
 public:
 
+
+	void print() const;
+	
 	int64_t getRealizedSellAmount() const {
 		return mRealizedSellAmount;
 	}
