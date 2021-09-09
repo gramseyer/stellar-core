@@ -55,9 +55,6 @@ OrderbookClearingTarget::clearOffer(AbstractLedgerTxn& ltx, const IOCOffer& offe
 	auto header = ltx.loadHeader();
 
 	auto doTransfer = [&] (Asset asset, int64_t amount) {
-		if (amount < 0) {
-			throw std::runtime_error("arithmetic error");
-		}
 		if (asset.type() == ASSET_TYPE_NATIVE) {
 			auto account = loadAccount(ltx, offer.mSourceAccount);
 			auto ok = addBalance(header, account, amount);
@@ -79,10 +76,10 @@ OrderbookClearingTarget::clearOffer(AbstractLedgerTxn& ltx, const IOCOffer& offe
 	};
 
 	doTransfer(mTradingPair.buying, buyAmount);
-	//When creating the offer, we reduced the account's balance my offer.mSellAmount.
+	//When creating the offer, we do not modify account balances.
 	//The correct approach might instead to be adjust an account's liabilities during offer
 	//creation instead.
-	doTransfer(mTradingPair.selling, offer.mSellAmount - sellAmount);
+	doTransfer(mTradingPair.selling, -sellAmount);
 }
 
 void

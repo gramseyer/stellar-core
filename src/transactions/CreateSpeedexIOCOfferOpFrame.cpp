@@ -91,6 +91,7 @@ CreateSpeedexIOCOfferOpFrame::doApply(AbstractLedgerTxn& ltx)
 
 	ltx.addSpeedexIOCOffer(tradingPair, offer);
 
+/*
 	auto sourceAccount = loadAccount(ltx, getSourceID());
 
 	if (!sourceAccount) {
@@ -117,7 +118,8 @@ CreateSpeedexIOCOfferOpFrame::doApply(AbstractLedgerTxn& ltx)
         {
             throw std::runtime_error("commutative preconditions should block insufficent trustline balance");
         }
-	}
+	} */
+	
 	return true;
 }
 bool 

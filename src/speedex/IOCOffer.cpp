@@ -56,7 +56,9 @@ IOCOffer::offerHash(Price price, AccountID sourceAccount, uint64_t sourceSeqNum,
 }
 
 void IOCOffer::unwindOffer(AbstractLedgerTxn& ltx, const Asset& sellAsset) const {
-	auto header = ltx.loadHeader();
+	
+
+	/*auto header = ltx.loadHeader();
 	auto account = loadAccount(ltx, mSourceAccount);
 
 
@@ -77,7 +79,7 @@ void IOCOffer::unwindOffer(AbstractLedgerTxn& ltx, const Asset& sellAsset) const
         {
             throw std::runtime_error("couldn't refund ioc trustline balance");
         }
-    }
+    }*/
 }
 
 
