@@ -70,6 +70,8 @@ getSignaturesInner(TransactionEnvelope& env)
         {
         case ENVELOPE_TYPE_TX:
             return env.feeBump().tx.innerTx.v1().signatures;
+        case ENVELOPE_TYPE_TX_COMMUTATIVE:
+            return env.feeBump().tx.innerTx.commutativeTx().signatures;
         default:
             abort();
         }
@@ -94,6 +96,8 @@ getOperations(TransactionEnvelope& env)
         {
         case ENVELOPE_TYPE_TX:
             return env.feeBump().tx.innerTx.v1().tx.operations;
+        case ENVELOPE_TYPE_TX_COMMUTATIVE:
+            return env.feeBump().tx.innerTx.commutativeTx().tx.operations;
         default:
             abort();
         }

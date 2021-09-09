@@ -671,33 +671,6 @@ struct TransactionV1Envelope
     DecoratedSignature signatures<20>;
 };
 
-struct FeeBumpTransaction
-{
-    MuxedAccount feeSource;
-    int64 fee;
-    union switch (EnvelopeType type)
-    {
-    case ENVELOPE_TYPE_TX:
-        TransactionV1Envelope v1;
-    }
-    //TODO commutative tx here
-    innerTx;
-    union switch (int v)
-    {
-    case 0:
-        void;
-    }
-    ext;
-};
-
-struct FeeBumpTransactionEnvelope
-{
-    FeeBumpTransaction tx;
-    /* Each decorated signature is a signature over the SHA256 hash of
-     * a TransactionSignaturePayload */
-    DecoratedSignature signatures<20>;
-};
-
 struct CommutativeTransaction
 {
     MuxedAccount sourceAccount;
@@ -715,6 +688,35 @@ struct CommutativeTransactionEnvelope
 {
     CommutativeTransaction tx;
 
+    /* Each decorated signature is a signature over the SHA256 hash of
+     * a TransactionSignaturePayload */
+    DecoratedSignature signatures<20>;
+};
+
+struct FeeBumpTransaction
+{
+    MuxedAccount feeSource;
+    int64 fee;
+    union switch (EnvelopeType type)
+    {
+    case ENVELOPE_TYPE_TX:
+        TransactionV1Envelope v1;
+    case ENVELOPE_TYPE_TX_COMMUTATIVE:
+        CommutativeTransactionEnvelope commutativeTx;
+    }
+    //TODO commutative tx here
+    innerTx;
+    union switch (int v)
+    {
+    case 0:
+        void;
+    }
+    ext;
+};
+
+struct FeeBumpTransactionEnvelope
+{
+    FeeBumpTransaction tx;
     /* Each decorated signature is a signature over the SHA256 hash of
      * a TransactionSignaturePayload */
     DecoratedSignature signatures<20>;

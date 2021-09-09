@@ -3398,7 +3398,6 @@ LedgerTxnRoot::Impl::loadSnapshotEntry(LedgerKey const& key) const {
             entry = loadLiquidityPool(key);
             break;
         case SPEEDEX_CONFIG:
-            std::printf("loaded speedex config from db\n");
             entry = loadSpeedexConfig(key);
             break;
         default:

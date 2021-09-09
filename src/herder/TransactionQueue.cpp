@@ -639,10 +639,15 @@ TransactionQueue::shift()
             mBannedTransactionsCounter.inc(
                 static_cast<int64_t>(it->second.mTransactions.size()));
             it->second.mTransactions.clear();
-            if (it->second.mTotalFees == 0)
+
+            if (mCommutativityRequirements.tryCleanAccountEntry(it->first))
             {
-                it = mAccountStates.erase(it);
+                mAccountStates.erase(it);
             }
+            //if (it->second.mTotalFees == 0)
+            //{
+            //    it = mAccountStates.erase(it);
+            //}
             else
             {
                 it->second.mAge = 0;

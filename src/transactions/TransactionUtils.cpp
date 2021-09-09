@@ -416,7 +416,6 @@ loadSpeedexConfig(AbstractLedgerTxn& ltx)
 SpeedexConfigSnapshotFrame
 loadSpeedexConfigSnapshot(AbstractLedgerTxn&ltx)
 {
-    std::printf("starting get config frame\n");
     return SpeedexConfigSnapshotFrame(ltx.loadSnapshotEntry(speedexConfigKey()));
 }
 

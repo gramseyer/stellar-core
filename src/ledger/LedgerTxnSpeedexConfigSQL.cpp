@@ -26,13 +26,7 @@ static LedgerEntry currentSpeedexConfig = getDefaultSpeedexConfig();
 std::shared_ptr<LedgerEntry const>
 LedgerTxnRoot::Impl::loadSpeedexConfig(LedgerKey const& key) const
 {
-    throwIfNotSpeedexConfig(key.type());
-
-   // auto default_config = getDefaultSpeedexConfig();
-
-    std::printf("getting current default speedex config\n");
-
-    
+    throwIfNotSpeedexConfig(key.type());   
     return std::make_shared<LedgerEntry const>(currentSpeedexConfig);
 }
 
