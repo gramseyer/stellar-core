@@ -53,7 +53,8 @@ public:
 
 	void assertValidTrade(int64_t sellAmount, int64_t buyAmount, uint64_t sellPrice, uint64_t buyPrice) const;
 
-	void doTransfer(int64_t sellAmount, int64_t buyAmount, uint64_t sellPrice, uint64_t buyPrice);
+	SpeedexLiquidityPoolClearingStatus 
+	doTransfer(int64_t sellAmount, int64_t buyAmount, uint64_t sellPrice, uint64_t buyPrice);
 
 	int128_t 
 	amountOfferedForSaleTimesSellPrice(uint64_t sellPrice, uint64_t buyPrice) const;

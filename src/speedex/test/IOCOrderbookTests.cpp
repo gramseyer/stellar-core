@@ -37,8 +37,8 @@ static void addOffer(IOCOrderbook& orderbook, int32_t p_n, int32_t p_d, int64_t 
 
 	AccountID acct = getAccount("blah").getPublicKey();
 
-	auto hash = IOCOffer::offerHash(p, acct, idx, 0);
-	IOCOffer offer(amount, p, hash, acct);
+	//auto hash = IOCOffer::offerHash(p, acct, idx, 0);
+	IOCOffer offer(amount, p, acct, idx, 0);
 	orderbook.addOffer(offer);
 }
 

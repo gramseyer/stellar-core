@@ -8,15 +8,21 @@
 #include "crypto/SHA.h"
 
 #include "ledger/LedgerTxn.h"
-
 #include "ledger/TrustLineWrapper.h"
+#include "ledger/AssetPair.h"
 
 #include "transactions/TransactionUtils.h"
 
 namespace stellar {
 
-IOCOffer::IOCOffer(int64_t sellAmount, Price minPrice, Hash totalOrderingHash, AccountID sourceAccount)
-	: mSellAmount(sellAmount), mMinPrice(minPrice), mTotalOrderingHash(totalOrderingHash), mSourceAccount(sourceAccount) {}
+IOCOffer::IOCOffer(int64_t sellAmount, Price minPrice, AccountID sourceAccount, uint64_t sourceSeqNum, uint32_t opIdNum)
+	: mSellAmount(sellAmount)
+	, mMinPrice(minPrice)
+	, mTotalOrderingHash(offerHash(minPrice, sourceAccount, sourceSeqNum, opIdNum))
+	, mSourceAccount(sourceAccount)
+	, mSourceSeqNum (sourceSeqNum)
+	, mOpIdx(opIdNum)
+{}
 
 std::strong_ordering 
 IOCOffer::operator<=>(const IOCOffer& other) const {
@@ -55,7 +61,25 @@ IOCOffer::offerHash(Price price, AccountID sourceAccount, uint64_t sourceSeqNum,
 	return hasher.finish();
 }
 
-void IOCOffer::unwindOffer(AbstractLedgerTxn& ltx, const Asset& sellAsset) const {
+SpeedexOfferClearingStatus 
+IOCOffer::getClearingStatus(int64_t sellAmount, int64_t buyAmount, AssetPair const& tradingPair) const
+{
+	SpeedexOfferClearingStatus status;
+
+	status.sellAsset = tradingPair.selling;
+	status.buyAsset = tradingPair.buying;
+
+	status.sourceAccount = mSourceAccount;
+	status.seqNum = mSourceSeqNum;
+	status.offerIndex = mOpIdx;
+	status.soldAmount = sellAmount;
+	status.boughtAmount = buyAmount;
+
+	return status;
+}
+
+
+//void IOCOffer::unwindOffer(AbstractLedgerTxn& ltx, const Asset& sellAsset) const {
 	
 
 	/*auto header = ltx.loadHeader();
@@ -80,7 +104,7 @@ void IOCOffer::unwindOffer(AbstractLedgerTxn& ltx, const Asset& sellAsset) const
             throw std::runtime_error("couldn't refund ioc trustline balance");
         }
     }*/
-}
+//}
 
 
 

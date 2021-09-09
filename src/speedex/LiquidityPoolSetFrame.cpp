@@ -65,4 +65,10 @@ LiquidityPoolSetFrame::demandQueryOneAssetPair(AssetPair const& tradingPair, std
 }
 
 
+LiquidityPoolFrame&
+LiquidityPoolSetFrame::getFrame(AssetPair const& tradingPair) {
+	return mLiquidityPools.at(tradingPair);
+}
+
+
 } /* stellar */

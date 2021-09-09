@@ -1164,7 +1164,7 @@ LedgerManagerImpl::applyTransactions(
         applyTransaction(tx, ltx, txResultSet, ledgerCloseMeta, index);
     }
 
-    runSpeedex(ltx);
+    auto speedexRes = runSpeedex(ltx);
 
     prefetchTransactionData(noncommutativeTxs);
 

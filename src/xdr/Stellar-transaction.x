@@ -453,6 +453,7 @@ struct CreateSpeedexIOCOfferOp
     Price minPrice;
 };
 
+//tie breaks in offer sorting are determined by hash(SpeedexIOCOfferHashContents)
 struct SpeedexIOCOfferHashContents
 {
     AccountID sourceAccount;
@@ -1396,16 +1397,8 @@ enum CreateSpeedexIOCOfferResultCode
     CREATE_SPEEDEX_IOC_OFFER_MALFORMED = -4
 };
 
-struct SpeedexOfferClearingStatus
-{
-    int64 soldAmount;
-    int64 boughtAmount;
-};
-
 union CreateSpeedexIOCOfferResult switch (CreateSpeedexIOCOfferResultCode code)
 {
-case CREATE_SPEEDEX_IOC_OFFER_SUCCESS:
-    SpeedexOfferClearingStatus trade;
 default:
     void;
 };

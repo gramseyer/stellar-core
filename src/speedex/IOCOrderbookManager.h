@@ -8,12 +8,16 @@
 #include "util/UnorderedMap.h"
 #include <map>
 
+#include "xdr/Stellar-ledger.h"
+
 namespace stellar {
 
 class AbstractLedgerTxn;
 class BatchClearingTarget;
 class OrderbookClearingTarget;
 struct SupplyDemand;
+class LiquidityPoolSetFrame;
+class LiquidityPoolFrame;
 
 class IOCOrderbookManager {
 	using int128_t = __int128_t;
@@ -23,7 +27,8 @@ class IOCOrderbookManager {
 	bool mSealed;
 	bool mCleared;
 
-	void clearOrderbook(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target);
+	std::pair<std::vector<SpeedexOfferClearingStatus>, std::optional<SpeedexLiquidityPoolClearingStatus>>
+ 	clearOrderbook(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target, LiquidityPoolFrame& lpFrame);
 
 	void throwIfSealed() const;
 	void throwIfNotSealed() const;
@@ -49,7 +54,8 @@ public:
 
 	void sealBatch();
 
-	void clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& batchSolution);
+	SpeedexResults
+	clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& batchSolution, LiquidityPoolSetFrame& liquidityPools);
 
 	size_t numOpenOrderbooks() const;
 

@@ -84,8 +84,7 @@ static void addOffer(AbstractLedgerTxn& ltx, int32_t p_n, int32_t p_d, int64_t a
 
 	AccountID acct = getAccount("blah").getPublicKey();
 
-	auto hash = IOCOffer::offerHash(p, acct, idx, 0);
-	IOCOffer offer(amount, p, hash, acct);
+	IOCOffer offer(amount, p, acct, idx, 0);
 
 	AssetPair tradingPair {
 		.selling = sell,

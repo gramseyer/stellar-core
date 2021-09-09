@@ -1,11 +1,13 @@
 #pragma once
 
+#include "xdr/Stellar-ledger.h"
+
 namespace stellar
 {
 
 class AbstractLedgerTxn;
 
-void
+SpeedexResults
 runSpeedex(AbstractLedgerTxn& ltx);
 
 } /* stellar */

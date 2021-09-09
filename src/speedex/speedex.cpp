@@ -12,7 +12,8 @@
 
 namespace stellar 
 {
-void
+
+SpeedexResults
 runSpeedex(AbstractLedgerTxn& ltx)
 {
     auto& speedexOrderbooks = ltx.getSpeedexIOCOffers();
@@ -37,7 +38,7 @@ runSpeedex(AbstractLedgerTxn& ltx)
 
     BatchSolution solution(solver.getSolution(), prices);
 
-    speedexOrderbooks.clearBatch(ltx, solution);
+    return speedexOrderbooks.clearBatch(ltx, solution, liquidityPools);
 }
 
 } /* stellar */

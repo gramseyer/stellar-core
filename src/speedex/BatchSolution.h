@@ -7,6 +7,8 @@
 #include "util/UnorderedMap.h"
 #include <map>
 
+#include "xdr/Stellar-ledger.h"
+
 namespace stellar {
 
 class OrderbookClearingTarget;
@@ -28,6 +30,9 @@ public:
 
 	std::vector<OrderbookClearingTarget>
 	produceClearingTargets() const;
+
+	std::vector<SpeedexClearingValuation>
+	getValuationResults() const;
 
 };
 

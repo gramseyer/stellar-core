@@ -35,7 +35,7 @@ OrderbookClearingTarget::getBuyAmount(int128_t amountTimesPrice) const {
 	return amountTimesPrice / mBuyPrice;
 }
 
-void
+SpeedexOfferClearingStatus
 OrderbookClearingTarget::clearOffer(AbstractLedgerTxn& ltx, const IOCOffer& offer) {
 
 	if (!checkPrice(offer)) {
@@ -80,9 +80,11 @@ OrderbookClearingTarget::clearOffer(AbstractLedgerTxn& ltx, const IOCOffer& offe
 	//The correct approach might instead to be adjust an account's liabilities during offer
 	//creation instead.
 	doTransfer(mTradingPair.selling, -sellAmount);
+
+	return offer.getClearingStatus(sellAmount, buyAmount, mTradingPair);
 }
 
-void
+SpeedexLiquidityPoolClearingStatus
 OrderbookClearingTarget::finishWithLiquidityPool(AbstractLedgerTxn& ltx, LiquidityPoolFrame& lpFrame) {
 	int128_t remainingToClear = mTotalClearTarget - mRealizedClearTarget;
 
@@ -91,12 +93,14 @@ OrderbookClearingTarget::finishWithLiquidityPool(AbstractLedgerTxn& ltx, Liquidi
 
 	lpFrame.assertValidSellAmount(sellAmount, mSellPrice, mBuyPrice);
 
-	lpFrame.doTransfer(sellAmount, buyAmount, mSellPrice, mBuyPrice);
+	auto status = lpFrame.doTransfer(sellAmount, buyAmount, mSellPrice, mBuyPrice);
 
 	mRealizedSellAmount += sellAmount;
 	mRealizedBuyAmount += buyAmount;
 
 	mRealizedClearTarget += remainingToClear;
+
+	return status;
 }
 
 bool

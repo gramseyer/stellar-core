@@ -28,6 +28,9 @@ public:
 	int128_t 
 	demandQueryOneAssetPair(AssetPair const& tradingPair, std::map<Asset, uint64_t> const& prices) const;
 
+	LiquidityPoolFrame&
+	getFrame(AssetPair const& tradingPair);
+
 };
 
 } /* stellar */

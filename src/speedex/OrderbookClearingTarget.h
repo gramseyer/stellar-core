@@ -2,6 +2,7 @@
 
 #include "ledger/AssetPair.h"
 #include <cstdint>
+#include "xdr/Stellar-ledger.h"
 
 namespace stellar {
 
@@ -41,17 +42,15 @@ public:
 
 	OrderbookClearingTarget(AssetPair tradingPair, uint64_t sellPrice, uint64_t buyPrice, int128_t totalClearingTarget);
 
-	void clearOffer(AbstractLedgerTxn& ltx, const IOCOffer& offer);
+	SpeedexOfferClearingStatus
+	clearOffer(AbstractLedgerTxn& ltx, const IOCOffer& offer);
 
 	AssetPair getAssetPair() const;
 
 	bool doneClearing() const;
 
-	void finishWithLiquidityPool(AbstractLedgerTxn& ltx, LiquidityPoolFrame& lpFrame);
-
-
-	//void clearOffers(IOCOrderbook& offers, LiquidityPoolFrame& lp);
-
+	SpeedexLiquidityPoolClearingStatus
+	finishWithLiquidityPool(AbstractLedgerTxn& ltx, LiquidityPoolFrame& lpFrame);
 };
 
 }

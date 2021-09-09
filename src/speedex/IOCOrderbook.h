@@ -10,6 +10,8 @@
 #include "speedex/OrderbookClearingTarget.h"
 #include "speedex/LiquidityPoolFrame.h"
 
+#include "xdr/Stellar-ledger.h"
+
 namespace stellar {
 
 struct IOCOrderbookClearingParams {
@@ -80,9 +82,10 @@ public:
 
 	void commitChild(const IOCOrderbook& child);
 
-	void clearOffers(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target, LiquidityPoolFrame& lpFrame);
+	std::pair<std::vector<SpeedexOfferClearingStatus>, std::optional<SpeedexLiquidityPoolClearingStatus>>
+	clearOffers(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target, LiquidityPoolFrame& lpFrame);
 
-	void finish(AbstractLedgerTxn& ltx);
+	void finish();
 
 	// output: radix 32 bits
 	int128_t cumulativeOfferedForSaleTimesPrice(uint64_t sellPrice, uint64_t buyPrice, uint8_t smoothMult) const;

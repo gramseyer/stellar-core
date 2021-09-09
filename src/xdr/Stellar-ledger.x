@@ -186,6 +186,53 @@ struct TransactionHistoryEntry
     ext;
 };
 
+struct SpeedexOfferClearingStatus
+{
+    Asset sellAsset;
+    Asset buyAsset;
+
+    AccountID sourceAccount;
+    uint64 seqNum;
+    uint32 offerIndex;
+
+    int64 soldAmount;
+    int64 boughtAmount;
+};
+
+struct SpeedexLiquidityPoolClearingStatus
+{
+    PoolID pool;
+    Asset soldAsset;
+    Asset boughtAsset;
+    int64 soldAmount;
+    int64 boughtAmount;
+};
+
+struct SpeedexClearingValuation
+{
+    Asset asset;
+    uint64 price;
+};
+
+struct SpeedexResults {
+    SpeedexClearingValuation valuations<>;
+    SpeedexOfferClearingStatus offerStatuses<>;
+    SpeedexLiquidityPoolClearingStatus lpStatuses<>;
+};
+
+struct TransactionHistoryResultEntryExtV1
+{
+
+    SpeedexResults results;
+
+    union switch(int v)
+    {
+        case 0:
+            void;
+    }
+    ext;
+};
+
 struct TransactionHistoryResultEntry
 {
     uint32 ledgerSeq;
@@ -196,6 +243,8 @@ struct TransactionHistoryResultEntry
     {
     case 0:
         void;
+    case 1:
+        TransactionHistoryResultEntryExtV1 v1;
     }
     ext;
 };

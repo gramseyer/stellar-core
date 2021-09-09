@@ -25,4 +25,19 @@ BatchSolution::produceClearingTargets() const {
 	return out;
 }
 
+std::vector<SpeedexClearingValuation>
+BatchSolution::getValuationResults() const
+{
+
+	std::vector<SpeedexClearingValuation> out;
+
+	for (auto const& [asset, price] : mAssetPrices)
+	{
+		out.emplace_back();
+		out.back().asset = asset;
+		out.back().price = price;
+	}
+	return out;
+}
+
 } /* stellar */

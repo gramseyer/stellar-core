@@ -71,35 +71,39 @@ IOCOrderbook::commitChild(const IOCOrderbook& other) {
 	mPrecomputedTatonnementData.clear();
 }
 
-void 
+std::pair<std::vector<SpeedexOfferClearingStatus>, std::optional<SpeedexLiquidityPoolClearingStatus>>
 IOCOrderbook::clearOffers(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target, LiquidityPoolFrame& lpFrame) {
 
 	throwIfCleared();
+
+	std::vector<SpeedexOfferClearingStatus> out;
+
 	for (auto iter = mOffers.begin(); iter != mOffers.end(); iter++) {
 		if (!target.doneClearing()) {
-			target.clearOffer(ltx, *iter);
-		} else {
-			iter -> unwindOffer(ltx, mTradingPair.selling);
+			out.push_back(target.clearOffer(ltx, *iter));
+		} else
+		{
+			break;
 		}
 	}
 
+	std::optional<SpeedexLiquidityPoolClearingStatus> lpRes = std::nullopt;
+
 	if (!target.doneClearing() && lpFrame) {
-		target.finishWithLiquidityPool(ltx, lpFrame);
+		lpRes = target.finishWithLiquidityPool(ltx, lpFrame);
 	}
 	if (!target.doneClearing()) {
 		throw std::runtime_error("invalid trade amounts!");
 	}
 	mCleared = true;
+
+	return {out, lpRes};
 }
 
 void
-IOCOrderbook::finish(AbstractLedgerTxn& ltx) {
+IOCOrderbook::finish() {
 
 	if (!mCleared) {
-
-		for (auto const& offer : mOffers) {
-			offer.unwindOffer(ltx, mTradingPair.selling);
-		}
 
 		mCleared = true;
 	}

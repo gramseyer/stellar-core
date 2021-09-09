@@ -7,8 +7,10 @@
 #include "transactions/TransactionUtils.h"
 
 #include "util/types.h"
-
+#include "util/XDROperators.h"
 #include "speedex/DemandUtils.h"
+
+#include "speedex/LiquidityPoolSetFrame.h"
 
 namespace stellar {
 
@@ -81,12 +83,10 @@ IOCOrderbookManager::clear() { // no offer unwinding here b/c only called when l
 }
 
 
-void 
-IOCOrderbookManager::clearOrderbook(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target) {
+std::pair<std::vector<SpeedexOfferClearingStatus>, std::optional<SpeedexLiquidityPoolClearingStatus>>
+IOCOrderbookManager::clearOrderbook(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target, LiquidityPoolFrame& lpFrame) {
 	auto assetPair = target.getAssetPair();
-	auto baseFrame = BaseLiquidityPoolFrame(ltx, assetPair);
-	auto lpFrame = LiquidityPoolFrame(baseFrame, assetPair);
-	getOrCreateOrderbook(assetPair).clearOffers(ltx, target, lpFrame);
+	return getOrCreateOrderbook(assetPair).clearOffers(ltx, target, lpFrame);
 }
 
 void
@@ -119,20 +119,35 @@ void IOCOrderbookManager::returnToSource(AbstractLedgerTxn& ltx, Asset asset, in
 	}
 }
 
-void 
-IOCOrderbookManager::clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& solution) {
+SpeedexResults 
+IOCOrderbookManager::clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& solution, LiquidityPoolSetFrame& liquidityPools) {
 	throwIfNotSealed();
 	throwIfAlreadyCleared();
+
+	SpeedexResults results;
+
+	auto valuations = solution.getValuationResults();
+	results.valuations.insert(
+		results.valuations.end(),
+		valuations.begin(),
+		valuations.end());
 
 	auto orderbookTargets = solution.produceClearingTargets();
 
 	for (auto& target : orderbookTargets) {
-		clearOrderbook(ltx, target);
+		auto& lpFrame = liquidityPools.getFrame(target.getAssetPair());
+		auto [offerResults, lpResults] = clearOrderbook(ltx, target, lpFrame);
+		results.offerStatuses.insert(
+			results.offerStatuses.end(),
+			offerResults.begin(),
+			offerResults.end());
+		if (lpResults)
+			results.lpStatuses.push_back(*lpResults);
 	}
 	UnorderedMap<Asset, int64_t> roundingErrors;
 
 	for (auto& [_, orderbook] : mOrderbooks) {
-		orderbook.finish(ltx);
+		orderbook.finish();
 	}
 	for (auto& target : orderbookTargets) {
 		auto assetPair = target.getAssetPair();
@@ -148,6 +163,10 @@ IOCOrderbookManager::clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& sol
 	}
 	mOrderbooks.clear();
 	mCleared = true;
+
+	//One would sort the results here, if we wanted to hash them.
+
+	return results;
 }
 
 void 
@@ -160,7 +179,6 @@ IOCOrderbookManager::demandQuery(
 	{
 		auto sellPrice = prices.at(assetPair.selling);
 		auto buyPrice = prices.at(assetPair.buying);
-
 
 		auto tradeAmount = orderbook.cumulativeOfferedForSaleTimesPrice(sellPrice, buyPrice, smoothMult);
 

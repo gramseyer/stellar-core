@@ -76,13 +76,7 @@ CreateSpeedexIOCOfferOpFrame::doApply(AbstractLedgerTxn& ltx)
 	auto price = mCreateSpeedexIOCOffer.minPrice;
 	auto amount = mCreateSpeedexIOCOffer.sellAmount;
 
-	auto hash = IOCOffer::offerHash(
-		price,
-		getSourceID(),
-		mParentTx.getSeqNum(),
-		mOperationIndex);
-	
-	IOCOffer offer(amount, price, hash, getSourceID());
+	IOCOffer offer(amount, price, getSourceID(), mParentTx.getSeqNum(), mOperationIndex);
 
 	AssetPair tradingPair {
 		.buying = mCreateSpeedexIOCOffer.buyAsset,

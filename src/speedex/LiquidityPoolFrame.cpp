@@ -254,7 +254,7 @@ LiquidityPoolFrame::assertValidTrade(int64_t sellAmount, int64_t buyAmount, uint
 	}
 }
 
-void 
+SpeedexLiquidityPoolClearingStatus 
 LiquidityPoolFrame::doTransfer(int64_t sellAmount, int64_t buyAmount, uint64_t sellPrice, uint64_t buyPrice) {
 
 	if (!mBaseFrame) {
@@ -270,7 +270,17 @@ LiquidityPoolFrame::doTransfer(int64_t sellAmount, int64_t buyAmount, uint64_t s
 		mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveB -= sellAmount;
 		mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveA += buyAmount;
 	}
-}
+
+	SpeedexLiquidityPoolClearingStatus status;
+
+	status.pool = mBaseFrame.mEntry.current().data.liquidityPool().liquidityPoolID;
+    status.soldAsset = mTradingPair.selling;
+    status.boughtAsset = mTradingPair.buying;
+    status.soldAmount = sellAmount;
+    status.boughtAmount = buyAmount;
+
+    return status;
+};
 
 
 
