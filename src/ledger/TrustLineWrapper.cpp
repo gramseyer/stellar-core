@@ -186,12 +186,6 @@ TrustLineWrapper::isCommutativeTxEnabledTrustLine() const {
     return getImpl()->isCommutativeTxEnabledTrustLine();
 }
 
-//bool
-//TrustLineWrapper::issuerExists(AbstractLedgerTxn& ltx) const {
-//    return getImpl()->issuerExists(ltx);
-//}
-
-
 int64_t
 TrustLineWrapper::getAvailableBalance(LedgerTxnHeader const& header) const
 {
@@ -294,22 +288,6 @@ bool
 TrustLineWrapper::NonIssuerImpl::isCommutativeTxEnabledTrustLine() const {
     return stellar::isCommutativeTxEnabledTrustLine(mEntry);
 }
-/*
-bool
-TrustLineWrapper::NonIssuerImpl::issuerExists(AbstractLedgerTxn& ltx) const {
-    auto asset = mEntry.current().data.trustLine().asset;
-
-    if (asset.type() == ASSET_TYPE_NATIVE) {
-        return false;
-    }
-    if (asset.type() == ASSET_TYPE_POOL_SHARE) {
-        return false;
-    }
-    auto issuer = getIssuer(asset);
-    auto issuerAccount = stellar::loadAccount(ltx, issuer);
-    return ((bool) issuerAccount);
-}
-*/
 
 int64_t
 TrustLineWrapper::NonIssuerImpl::getAvailableBalance(

@@ -1,0 +1,3917 @@
+New files:
+src/herder/AccountCommutativityRequirements.[h|cpp]
+src/herder/TransactionCommutativityRequirements.[h|cpp]
+src/herder/TxSetCommutativityRequirements.[h|cpp]
+
+src/transactions/CreateSpeedexIOCOfferOpFrame.[h|cpp]
+
+src/ledger/AssetPair.[h|cpp]
+src/ledger/LedgerTxnSpeedexConfigSql.cpp
+
+src/simplex/solver.[h|cpp]
+
+src/speedex/BatchSolution.[h|cpp]
+src/speedex/DemandOracle.[h|cpp]
+src/speedex/DemandUtils.[h|cpp]
+src/speedex/IOCOffer.[h|cpp]
+src/speedex/IOCOrderbook.[h|cpp]
+src/speedex/IOCOrderbookManager.[h|cpp]
+src/speedex/LiquidityPoolFrame.[h|cpp]
+src/speedex/LiquidityPoolSetFrame.[h|cpp]
+src/speedex/OrderbookClearingTarget.[h|cpp]
+src/speedex/SpeedexConfigEntryFrame.[h|cpp]
+src/speedex/TatonnementControls.[h|cpp]
+src/speedex/TatonnementOracle.[h|cpp]
+src/speedex/speedex.[h|cpp]
+src/speedex/uint256_t.[h|cpp]
+
+Modifications by Theme:
+
+Transaction Preconditions (Commutativity Requirements):
+   When building a transaction set, we require not only that accounts have sufficient XLM so as to cover
+   any fee bids, but also that accounts have sufficient amounts of every asset to cover each of their proposed
+   operations.
+
+    - A payment operation mandates that the sender possesses sufficient assets to send.
+    - A speedex create IOC offer mandates that the sender possesses sufficient assets to sell.
+
+   Since each operation can have a different source account and fees can be paid by accounts other than the source account, 
+   each transation induces a map [Account] -> (map [Asset] -> [Amount (int64_t)]);
+   That is, for the transaction to be valid, certain accounts must possess certain amounts of certain assets.
+
+   AccountCommutativityRequirements stores the map [Asset] -> [Amount] for one account, and TransactionCommutativityRequirements stores
+   a map [Account] -> [AccountCommutativityRequirements].
+
+   TxSetCommutativityRequirements stores an accumulation of the requirements for each account, accumulated over all transactions in a transaction set.
+
+   The transaction set validation workflow then becomes:
+
+   For each transaction:
+     1. Check that the transaction is well-formed
+        a. sequence numbers, etc
+        b. If transaction is commutative, then only commutative ops are allowed
+           - At the moment, commutative ops are PaymentOp and CreateSpeedexIOCOfferOp
+        c. Commutative transactions cannot follow noncommutative transactions within a block
+     2. Build a set of transaction commutativity requirements
+     3. Add the requirements to the transaction set
+
+   For each account that is the seq-num-source for a transaction in the set:
+     For each transaction:
+       If all the accounts relevant (i.e. supplying assets for the transaction) meet their preconditions for the whole set, continue.
+       Otherwise, remove the transaction and all subsequent txs with the same seq-num source.
+
+   A siimlar logic applies to the transaction queue.  To add a transaction, we compute the requirements, then check if the relevant accounts
+   all have sufficient balances to cover the new requirements.  Replacing transactions look at the difference between new and old requirements.
+
+   Errata:
+     - Asset requirements for one account cannot exceed int64_t.  If one account's requirement for some asset exceeds int64_t, 
+     all of that account's transactions are removed.
+     - Commutative transactions can be fee-bumped, but can only be replaced by commutative transactions (and vice versa).
+          - This requirement could be weakened, at the cost of a more complex validation check.
+
+   Questions:
+     - In the tx queue, should commutative txs that follow a noncommutative tx be pushed automatically to the next block, instead of being rejected/banned?
+
+Issuance limited assets:
+  - Introduce an account flag that limits total issuance of each asset to INT64_MAX
+     - Prevents overflows in commutative phase
+  - Implemented via TrustLineWrapper
+     - Log total asset issuance to an account entry extension.
+     - TrustLineWrapper::IssuerImpl::getAvailableBalance returns INT64_MAX - issuedAmount
+  - Issuance-limited assets cannot have the issuer account be deleted.
+  
+  - Errata:
+     - I have not implemented a mechanism for turning on this flag in a well-defined way (i.e. for an asset that already has been issued).
+     - Jon suggested possibly a database schema update could track total asset issuance, which we could then just read when enabling the flag.
+     - We may also prefer to implement this via issuer trustlines (and a flag on said trustline).  Current implementation can lead to large
+       AccountEntry objects.
+
+Commutativity-Enabled Assets:
+  - To use an asset in the commutative phase, the asset must be issuance limited.
+  - The receiver must have a valid trustline with limit INT64_MAX.
+
+Transaction processing:
+  - Transaction Application is multiphase.
+     - Commutative transactions
+     - Speedex
+     - Noncommutative transactions
+  
+  - Errata:
+      - Noncommutative transaction seq numbers cannot precede commutative transaction seq numbers (from one account)
+
+Speedex-Related Addiitons:
+  - New operation code : Create Speedex IOC Offer
+      - Implemented in CreateSpeedexIOCOffer.[h|cpp]
+      - Should be run in commutative phase.
+
+  - Applying this operation code creates an IOCOffer (src/speedex/IOCOffer.[h|cpp]).
+      - An IOCOffer is an offer to sell some amount of one asset A in exchange for some other asset B, with a minimum price requirement.
+  - These are grouped by trading pair (sell asset, buy asset) within IOCOrderbooks (src/speedex/IOCOrderbook.[h|cpp]).
+  - Trading pairs are stored within one IOCOrderbookManager (src/speedex/IOCOrderbookManager.[h|cpp])
+  - A LedgerTxn::Impl object contains one IOCOrderbookManager.  Committing a child LedgerTxn object adds the offers in the child's orderbook manager
+    into the parent's orderbook manager.
+
+      - Motivation:
+         - Price computation and offer clearing require interacting repeatedly with orders in an order where offers are sorted by price.
+         - It is convenient, therefore, to store offers in this manner.
+         - An alternative would be to add offers in unsorted order to a LedgerTxn object, and then extract them all and sort them into an IOCOrderbookManager.
+  
+  - New Ledger Entry type: SpeedexConfig
+      - Contains a list of assets that are tradeable on Speedex.
+      - These assets need to be commutative-enabled.  But for performance reasons, we may not want to allow trading of every asset at once on speedex.
+       (speedex's performance would possibly degrade if naively trying to trade 10,000 NFTS, for example).
+
+  - LedgerTxn gets a loadSnapshot method and a snapshot cache
+      - Reads ledger entries as they existed at the last time the LedgerTxnRoot committed.
+      - Useful for the commutative phase - transactions in the commutative phase may sometimes need to read data as it existed at the start of the commutative phase,
+        without any potential modifications by other transactions.  Currently used only for SpeedexConfig entries.
+         - Would be required for implementing a commutative LiquidityPoolDeposit operation.
+      - returns shared_ptr<const LedgerEntry> to ensure callers do not attempt to write to this snapshot.
+
+Solution Computation
+  - Tatonnement runs for a fixed number of rounds
+      - speedex/TatonnementOracle.[h|cpp]
+  - Pass computed prices to a custom linear programming solver
+      - simplex/solver.[h|cpp]
+      - The lp solves the problem "given these prices, maximize the amount of trading activity"
+      - Reduces to a network flow problem.  This means the simplex constraint matrix is "totally unimodular"
+         - in concrete terms, all entries are +/- 1 and there's always an integral optimal solution.
+         - The solver never has to use floating-point arithmetic.
+
+   - Output: For each trading pair (sell, buy):
+      - an amount y, where y/sell_price is the amount of asset "sell" sold to purchase y/buy_price units of asset "buy"
+
+
+Offer Clearing
+   - For each trading pair and trading target y (the solution output):
+      - Starting from offers with the lowest minimum price and moving to higher minimum prices:
+         - clearedAmount := 0
+         - Clear the offer as much as possible.  That is:
+            - Set the clearing amount for this offer to be z := min(x * sell_price, y-clearedAmount)
+            - The offer sells ceil(z / sell_price) units of asset "sell" and purchases floor(z/buy_price) units of asset "buy" 
+            - clearedAmount <- clearedAmount + z
+   - Throughout this process, track the amount of each asset bought and sold.  Assets sold by offers with exceed assets bought due to rounding error.
+      - Return excess asset to asset source.  Note that asset source always exists for commutative-enabled assets.
+
+Errata:
+  - runSpeedex (in src/speedex/speedex.[h|cpp]) sequences the solution computation with the offer clearing, and outputs
+    a set of results.
+      - We need this separate results output, as we cannot use the existing TransactionResult framework to record the results of a speedex run.
+         - CreateSpeedexIOCOfferOp can succeed, for example, but at the time when this op succeeds, we do not know whether the created offer will actually trade,
+           and at what rate.
+         - This results also records trades that happen with the liquidity pools, which do not appear to have any other good place to go.
+      - Unfortunately, TransactionResultSet has no extension field.
+      - As implemented right now, runSpeedex computes a SpeedexResults object, which is then ignored (although useful in testing).
+        See LedgerManagerImpl::applyTransactions.
+  - The issuance limited assets is easiest to implement if we load the issuer account behind TrustLineWrapper::IssuerImpl.
+      - This makes it very easy to accidentally load the same LedgerTxnEntry twice.
+      - This happens in several operation codes and in OfferExchange.[h|cpp].
+      - The operation codes could be straightforwardly refactored to avoid the problem, while OfferExchange required passing lambdas
+        that, when called, load a ledger entry, instead of passing entries directly.
+  - SpeedexConfig entries have a unique key - so there can only be one at any time.  This causes a bunch of weird issues in tests with randomly-generated
+    ledger entries (specifically the bucket tests).  The fix is to restrict when autocheck can generate SpeedexConfig entries.
+  - SpeedexConfig is implemented here as a static variable behind src/ledger/LedgerTxnSpeedexConfigSql.cpp, not a database schema change.
+  - There are a number of "magic Tatonnement constants" defined in SpeedexConfigEntryFrame.  These are not actually "magic", and can be adjusted
+    with (in my experience) only marginal changes to Tatonnement's performance (and I chose them without too much detailed thought -- "that looks about right");
+    They are:
+    TatonnementControlParams
+    {
+        .mTaxRate = 5,
+          - Not currently used.  One option for a stopping criterion for Tatonnement would be to say "Would the market clear if we charged an epsilon fee".
+          - Note that even with this criterion in Tatonnement, it would not be used in the LP solver (i.e. no fee is actually charged).
+          - The actual rate is 2^-mTaxRate.
+        .mSmoothMult = 5,
+          - Each offer's optimal behavior is a discontinuous function.  This parameter defines a continuous approximation.
+          - Mu := 2^-mSmoothMult
+          - Unapproximated:
+             - Offer trades iff offer.minPrice < market_price
+          - Approximated:
+             - Offer trades if offer.minPrice < market_price * (1-Mu)
+             - Offer does not trade if offer.minPrice > market_price
+             - Offer trades fractionally in the interim.  
+               Specifically, a lambda fraction executes for lambda := (market_price - offer.minPrice) / (market_price * Mu)
+        .mMaxRounds = 1000,
+          - Maximum number of rounds for Tatonnement
+        .mStepUp = 45,
+          - When Tatonnement makes a step, increase the step size by mStepUp / 2^mStepSizeRadix == 1.4
+            Any value in [1.1, 1.5] seems to work acceptably well.
+        .mStepDown = 25,
+          - When Tatonnement finds that its target step size is too large (according to its optimization heuristic),
+            multiply step size by mStepDown / 2^mStepSizeRadix == 0.8
+            Any value in [0.7, 0.9] seems to work acceptably well.
+        .mStepSizeRadix = 5,
+        .mStepRadix = 65
+          - Step size is multiplied by 2^-mStepRadix.
+            Too small (large steps) and Tatonnement will likely oscillate, and too large (small steps) and Tatonnement cannot make any steps.
+            Likely any value in [50, 90] is ok. 
+    };
+
+    If one were to run several copies of Tatonnement in parallel (and take the best result), the only parameters worth varying
+    are mStepRadix and mSmoothMult.
+
+    Additionally, within TatonnementOracle, we have the constants (1, 100).  These denote that a Tatonnement step is ok if the
+    guiding heuristic's value does not increase by more than (1/100)=1%
+      - This relaxes a typical step-size choice criterion common to the numerical optimization literature (Wolfe conditions).
+      - Need the relaxation because (1) the choice of objective may not actually be convex, so we do not wish to get stuck and (2) for Tatonnement,
+        making any step is often better than finding the step of the perfect size.
+
+
+Other files:
+  - uint256_t.[h|cpp] implements a few 256-bit integer operations.  Used inside Tatonnement.
+  - LiquidityPoolFrame and LiquidityPoolSetFrame perform trade calculations on liquidity pools.
+     - LiquidityPoolFrame objects are one-directional.  That is, they have a sell asset and a buy asset.
+       This is for convenience when working within Tatonnement.
+     - One liquidity pool corresponds to two LiquidityPoolFrame objects.
+     - LiquidityPoolSetFrame manages the LedgerTxnEntry loading (to avoid double-loading a key).
+  - TatonnementControls manages utility classes for Tatonnement.
+  - SpeedexConfigEntryFrame wraps a SpeedexConfig entry with utility methods.
+  - AssetPair is extracted from LedgerTxn.  It was quite useful on its own.
+
+
+
+
+
+Below is a condensed diff (not including tests or newly created files).
+
+
+============================================================================================
+
+
+diff --git a/src/herder/TransactionQueue.cpp b/src/herder/TransactionQueue.cpp
+index d617624f..057830af 100644
+--- a/src/herder/TransactionQueue.cpp
++++ b/src/herder/TransactionQueue.cpp
+
+@@ -80,6 +81,14 @@ canReplaceByFee(TransactionFrameBasePtr tx, TransactionFrameBasePtr oldTx,
+     int64_t oldFee = oldTx->getFeeBid();
+     uint32_t oldNumOps = std::max<uint32_t>(1, oldTx->getNumOperations());
+ 
++    // More effective way would be to track for each account where the boundary between
++    // commutative txs and noncommutative txs is, and then check this condition
++    // or that the tx is on the boundary.
++    if (tx -> isCommutativeTransaction() != oldTx -> isCommutativeTransaction()) {
++        minFee = INT64_MAX;
++        return false;
++    }
++
+     // newFee / newNumOps >= FEE_MULTIPLIER * oldFee / oldNumOps
+     // is equivalent to
+     // newFee * oldNumOps >= FEE_MULTIPLIER * oldFee * newNumOps
+@@ -159,7 +168,7 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
+         return TransactionQueue::AddResult::ADD_STATUS_FILTERED;
+     }
+ 
+-    int64_t netFee = tx->getFeeBid();
++    //int64_t netFee = tx->getFeeBid();
+     int64_t seqNum = 0;
+     TransactionFrameBasePtr oldTx;
+ 
+@@ -181,6 +190,13 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
+                 }
+ 
+                 seqNum = transactions.back().mTx->getSeqNum();
++
++                if ((!transactions.back().mTx -> isCommutativeTransaction())
++                    && tx -> isCommutativeTransaction())
++                {
++                    // Can't follow a noncommutative tx with a commutative tx
++                    return TransactionQueue::AddResult::ADD_STATUS_ERROR;
++                }
+             }
+             else
+             {
+@@ -208,11 +224,11 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
+                     }
+ 
+                     oldTx = oldTxIter->mTx;
+-                    int64_t oldFee = oldTx->getFeeBid();
+-                    if (oldTx->getFeeSourceID() == tx->getFeeSourceID())
+-                    {
+-                        netFee -= oldFee;
+-                    }
++                    //int64_t oldFee = oldTx->getFeeBid();
++                    //if (oldTx->getFeeSourceID() == tx->getFeeSourceID())
++                   // {
++                   //     netFee -= oldFee;
++                   // }
+                 }
+ 
+                 seqNum = tx->getSeqNum() - 1;
+@@ -243,8 +259,23 @@ TransactionQueue::canAdd(TransactionFrameBasePtr tx,
+         return TransactionQueue::AddResult::ADD_STATUS_ERROR;
+     }
+ 
++    if (oldTx)
++    {
++        if (!mCommutativityRequirements.tryReplaceTransaction(tx, oldTx, ltx))
++        {
++            tx->getResult().result.code(txINSUFFICIENT_BALANCE);
++            return TransactionQueue::AddResult::ADD_STATUS_ERROR;
++        }
++    } else {
++        if (!mCommutativityRequirements.tryAddTransaction(tx, ltx))
++        {
++            tx->getResult().result.code(txINSUFFICIENT_BALANCE);
++            return TransactionQueue::AddResult::ADD_STATUS_ERROR;
++        }
++    }
++
+@@ -269,7 +300,7 @@ TransactionQueue::releaseFeeMaybeEraseAccountState(TransactionFrameBasePtr tx)
+     iter->second.mTotalFees -= tx->getFeeBid();
+     if (iter->second.mTransactions.empty())
+     {
+-        if (iter->second.mTotalFees == 0)
++        if (mCommutativityRequirements.tryCleanAccountEntry(iter->first))
+         {
+             mAccountStates.erase(iter);
+         }
+@@ -372,10 +403,14 @@ TransactionQueue::dropTransactions(AccountStates::iterator stateIter,
+     // the fee-source for some other transaction or (2) reset the age otherwise.
+     if (stateIter->second.mTransactions.empty())
+     {
+-        if (stateIter->second.mTotalFees == 0)
++        if (mCommutativityRequirements.tryCleanAccountEntry(stateIter->first))
+         {
+             mAccountStates.erase(stateIter);
+         }
++       // if (stateIter->second.mTotalFees == 0)
++       // {
++       //     mAccountStates.erase(stateIter);
++       // }
+         else
+         {
+             stateIter->second.mAge = 0;
+@@ -604,10 +639,15 @@ TransactionQueue::shift()
+             mBannedTransactionsCounter.inc(
+                 static_cast<int64_t>(it->second.mTransactions.size()));
+             it->second.mTransactions.clear();
+-            if (it->second.mTotalFees == 0)
++
++            if (mCommutativityRequirements.tryCleanAccountEntry(it->first))
+             {
+-                it = mAccountStates.erase(it);
++                mAccountStates.erase(it);
+             }
++            //if (it->second.mTotalFees == 0)
++            //{
++            //    it = mAccountStates.erase(it);
++            //}
+             else
+             {
+                 it->second.mAge = 0;
+diff --git a/src/herder/TransactionQueue.h b/src/herder/TransactionQueue.h
+index 0f68751f..b559c4ed 100644
+--- a/src/herder/TransactionQueue.h
++++ b/src/herder/TransactionQueue.h
+@@ -173,6 +175,7 @@ class TransactionQueue
+     uint32 const mPendingDepth;
+ 
+     AccountStates mAccountStates;
++    TxSetCommutativityRequirements mCommutativityRequirements;
+     BannedTransactions mBannedTransactions;
+     uint32_t mLedgerVersion;
+ 
+diff --git a/src/herder/TxSetFrame.cpp b/src/herder/TxSetFrame.cpp
+index 48791fb6..d50ecf5e 100644
+--- a/src/herder/TxSetFrame.cpp
++++ b/src/herder/TxSetFrame.cpp
+@@ -105,12 +106,27 @@ SeqSorter(TransactionFrameBasePtr const& tx1,
+     * transactions for an account are sorted by sequence number (ascending)
+     * the order between accounts is randomized
+ */
+-std::vector<TransactionFrameBasePtr>
++std::pair<TxSetFrame::TransactionPtrVec, TxSetFrame::TransactionPtrVec>
+ TxSetFrame::sortForApply()
+ {
+     ZoneScoped;
+     auto txQueues = buildAccountTxQueues();
+ 
++
++    TransactionPtrVec commutativeTxs;
++
++    for (auto& [_, queue] : txQueues) {
++        while (!queue.empty()) {
++            auto front = queue.front();
++            if (front->isCommutativeTransaction()) {
++                commutativeTxs.push_back(front);
++                queue.pop_front();
++            } else {
++                break;
++            }
++        }
++    }
++
+     // build txBatches
+     // txBatches i-th element contains each i-th transaction for accounts with a
+     // transaction in the transaction set
+@@ -123,6 +139,10 @@ TxSetFrame::sortForApply()
+         // go over all users that still have transactions
+         for (auto it = txQueues.begin(); it != txQueues.end();)
+         {
++            if (it->second.empty()) {
++                it = txQueues.erase(it);
++                continue;
++            }
+             auto& h = it->second.front();
+             curBatch.emplace_back(h);
+             it->second.pop_front();
+@@ -138,8 +158,9 @@ TxSetFrame::sortForApply()
+         }
+     }
+ 
+-    vector<TransactionFrameBasePtr> retList;
+-    retList.reserve(mTransactions.size());
++    TransactionPtrVec retList;
++    retList.reserve(mTransactions.size() - commutativeTxs.size());
++
+     for (auto& batch : txBatches)
+     {
+         // randomize each batch using the hash of the transaction set
+@@ -152,7 +173,7 @@ TxSetFrame::sortForApply()
+         }
+     }
+ 
+-    return retList;
++    return std::make_pair(commutativeTxs, retList);
+ }
+ 
+ struct SurgeCompare
+@@ -283,14 +304,18 @@ TxSetFrame::checkOrTrim(Application& app,
+                         bool justCheck, uint64_t lowerBoundCloseTimeOffset,
+                         uint64_t upperBoundCloseTimeOffset)
+ {
+     ZoneScoped;
+     LedgerTxn ltx(app.getLedgerTxnRoot());
+ 
+-    UnorderedMap<AccountID, int64_t> accountFeeMap;
++    TxSetCommutativityRequirements reqs;
++
+     auto accountTxMap = buildAccountTxQueues();
++
+     for (auto& kv : accountTxMap)
+     {
+         int64_t lastSeq = 0;
++        bool foundNoncommutative = false;
+         auto iter = kv.second.begin();
+         while (iter != kv.second.end())
+         {
+@@ -298,6 +323,7 @@ TxSetFrame::checkOrTrim(Application& app,
+             if (!tx->checkValid(ltx, lastSeq, lowerBoundCloseTimeOffset,
+                                 upperBoundCloseTimeOffset))
+             {
++                std::printf("individual tx failed a validity check\n");
+                 if (justCheck)
+                 {
+                     CLOG_DEBUG(
+@@ -309,14 +335,47 @@ TxSetFrame::checkOrTrim(Application& app,
+                         tx->getResultCode());
+                     return false;
+                 }
+-                trimmed.emplace_back(tx);
+-                removeTx(tx);
+-                iter = kv.second.erase(iter);
++                while (iter != kv.second.end()) {
++                    trimmed.emplace_back(*iter);
++                    removeTx(*iter);
++                    iter = kv.second.erase(iter);
++                }
++                continue;
+             }
+             else
+             {
++
++                if (tx -> isCommutativeTransaction() && foundNoncommutative) 
++                {
++                    
++                    std::printf("wtf\n");
++                    if (justCheck) 
++                    {
++                        CLOG_DEBUG(
++                            Herder,
++                            "Cannot follow noncommutative tx by commutative tx in one block");
++                        return false;
++                    }
++                    while(iter != kv.second.end())
++                    {
++                        trimmed.emplace_back(*iter);
++                        removeTx(*iter);
++                        iter = kv.second.erase(iter);
++                    }
++                    continue;
++                }
++
++                if (!tx -> isCommutativeTransaction()) {
++                    std::printf("found noncommutative\n");
++                    foundNoncommutative = true;
++                }
++
+                 lastSeq = tx->getSeqNum();
+-                int64_t& accFee = accountFeeMap[tx->getFeeSourceID()];
++
++                auto res = reqs.validateAndAddTransaction(tx, ltx);
++
++
++                /*int64_t& accFee = accountFeeMap[tx->getFeeSourceID()];
+                 if (INT64_MAX - accFee < tx->getFeeBid())
+                 {
+                     accFee = INT64_MAX;
+@@ -324,41 +383,57 @@ TxSetFrame::checkOrTrim(Application& app,
+                 else
+                 {
+                     accFee += tx->getFeeBid();
++                } */
++
++                if (res) {
++                    ++iter;
++                } else {
++                    std::printf("validateandAddTransaction failed\n");
++                    if (justCheck) {
++                        CLOG_DEBUG(
++                            Herder,
++                            "Invalid TxSet: TODO logging");
++                        return false;
++                    }
++                    while (iter != kv.second.end())
++                    {
++                        trimmed.emplace_back(*iter);
++                        removeTx(*iter);
++                        iter = kv.second.erase(iter);
++                    }
++                    continue;
+                 }
+-                ++iter;
+             }
+         }
+     }
+ 
+     auto header = ltx.loadHeader();
+-    for (auto& kv : accountTxMap)
++
++    for (auto& [_, accountTxs] : accountTxMap)
+     {
+-        auto iter = kv.second.begin();
+-        while (iter != kv.second.end())
+-        {
+-            auto tx = *iter;
+-            auto feeSource = stellar::loadAccount(ltx, tx->getFeeSourceID());
+-            auto totFee = accountFeeMap[tx->getFeeSourceID()];
+-            if (getAvailableBalance(header, feeSource) < totFee)
+-            {
+-                if (justCheck)
+-                {
+-                    CLOG_DEBUG(Herder,
+-                               "Got bad txSet: {} account can't pay fee tx: {}",
+-                               hexAbbrev(mPreviousLedgerHash),
+-                               xdr_to_string(tx->getEnvelope(),
+-                                             "TransactionEnvelope"));
+-                    return false;
+-                }
+-                while (iter != kv.second.end())
+-                {
+-                    trimmed.emplace_back(*iter);
+-                    removeTx(*iter);
+-                    ++iter;
++        auto iter = accountTxs.begin();
++        while (iter != accountTxs.end()) {
++
++            auto relevantAccounts = (*iter)->getRelevantAccounts();
++            for (auto acct : relevantAccounts) {
++                //TODO cache results of this check
++                if (!reqs.checkAccountHasSufficientBalance(acct, ltx, header)) {
++                    std::printf("insufficient balance?\n");
++                    if (justCheck) {
++                        CLOG_DEBUG(
++                            Herder,
++                            "Insufficient balance TODO logging");
++                        return false;
++                    }
++                    while (iter != accountTxs.end()) {
++                        trimmed.emplace_back(*iter);
++                        removeTx(*iter);
++                        iter = accountTxs.erase(iter);
++                    }
++                    continue;
+                 }
+             }
+-            else
+-            {
++            if (iter != accountTxs.end()) {
+                 ++iter;
+             }
+         }
+
+diff --git a/src/herder/TxSetFrame.h b/src/herder/TxSetFrame.h
+index ede66de2..ee5fcf6a 100644
+--- a/src/herder/TxSetFrame.h
++++ b/src/herder/TxSetFrame.h
+@@ -35,7 +35,7 @@ class AbstractTxSetFrameForApply
+ 
+     virtual size_t sizeOp() const = 0;
+ 
+-    virtual std::vector<TransactionFrameBasePtr> sortForApply() = 0;
++    virtual std::pair<std::vector<TransactionFrameBasePtr>, std::vector<TransactionFrameBasePtr>> sortForApply() = 0;
+     virtual void toXDR(TransactionSet& set) = 0;
+ };
+ 
+@@ -44,12 +44,13 @@ class TxSetFrame : public AbstractTxSetFrameForApply
+     std::optional<Hash> mHash;
+ 
+     // mValid caches both the last app LCL that we checked
+-    // vaidity for, and the result of that validity check.
++    // validity for, and the result of that validity check.
+     std::optional<std::pair<Hash, bool>> mValid;
+ 
+     Hash mPreviousLedgerHash;
+ 
+     using AccountTransactionQueue = std::deque<TransactionFrameBasePtr>;
++    using TransactionPtrVec = std::vector<TransactionFrameBasePtr>;
+ 
+     bool checkOrTrim(Application& app,
+                      std::vector<TransactionFrameBasePtr>& trimmed,
+@@ -79,7 +80,7 @@ class TxSetFrame : public AbstractTxSetFrameForApply
+ 
+     virtual void sortForHash();
+ 
+-    std::vector<TransactionFrameBasePtr> sortForApply() override;
++    std::pair<TransactionPtrVec, TransactionPtrVec> sortForApply() override;
+ 
+     bool checkValid(Application& app, uint64_t lowerBoundCloseTimeOffset,
+                     uint64_t upperBoundCloseTimeOffset);
+
+diff --git a/src/ledger/LedgerManagerImpl.cpp b/src/ledger/LedgerManagerImpl.cpp
+index 6b4e43b6..638b0fc0 100644
+--- a/src/ledger/LedgerManagerImpl.cpp
++++ b/src/ledger/LedgerManagerImpl.cpp
+
+@@ -637,16 +639,23 @@ LedgerManagerImpl::closeLedger(LedgerCloseData const& ledgerData)
+     // the transaction set that was agreed upon by consensus
+     // was sorted by hash; we reorder it so that transactions are
+     // sorted such that sequence numbers are respected
+-    vector<TransactionFrameBasePtr> txs = ledgerData.getTxSet()->sortForApply();
++    auto [commutativeTxs, noncommutativeTxs] = ledgerData.getTxSet()->sortForApply();
+ 
+     // first, prefetch source accounts for txset, then charge fees
+-    prefetchTxSourceIds(txs);
+-    processFeesSeqNums(txs, ltx, txSet->getBaseFee(header.current()),
++    prefetchTxSourceIds(commutativeTxs);
++    prefetchTxSourceIds(noncommutativeTxs);
++    auto baseFee = txSet -> getBaseFee(header.current());
++    processFeesSeqNums(commutativeTxs, ltx, baseFee,
++                       ledgerCloseMeta);
++    //header is no longer valid -- the ltx.commit inside processFeesSeqNums invalidates it.
++
++    processFeesSeqNums(noncommutativeTxs, ltx, baseFee,
+                        ledgerCloseMeta);
+ 
+     TransactionResultSet txResultSet;
+-    txResultSet.results.reserve(txs.size());
+-    applyTransactions(txs, ltx, txResultSet, ledgerCloseMeta);
++    auto txs_size = commutativeTxs.size() + noncommutativeTxs.size();
++    txResultSet.results.reserve(txs_size);
++    applyTransactions(commutativeTxs, noncommutativeTxs, ltx, txResultSet, ledgerCloseMeta);
+ 
+     ltx.loadHeader().current().txSetResultHash = xdrSha256(txResultSet);
+ 
+@@ -765,14 +774,19 @@ LedgerManagerImpl::closeLedger(LedgerCloseData const& ledgerData)
+
+ void
+ LedgerManagerImpl::applyTransactions(
+-    std::vector<TransactionFrameBasePtr>& txs, AbstractLedgerTxn& ltx,
++    std::vector<TransactionFrameBasePtr>& commutativeTxs,
++    std::vector<TransactionFrameBasePtr>& noncommutativeTxs, 
++    AbstractLedgerTxn& ltx,
+     TransactionResultSet& txResultSet,
+     std::unique_ptr<LedgerCloseMeta> const& ledgerCloseMeta)
+ {
+@@ -1068,14 +1137,18 @@ LedgerManagerImpl::applyTransactions(
+     int index = 0;
+ 
+     // Record counts
+-    auto numTxs = txs.size();
++    auto numTxs = commutativeTxs.size() + noncommutativeTxs.size();
+     size_t numOps = 0;
+     if (numTxs > 0)
+     {
+         mTransactionCount.Update(static_cast<int64_t>(numTxs));
+         TracyPlot("ledger.transaction.count", static_cast<int64_t>(numTxs));
+         numOps =
+-            std::accumulate(txs.begin(), txs.end(), size_t(0),
++            std::accumulate(noncommutativeTxs.begin(), noncommutativeTxs.end(), size_t(0),
++                            [](size_t s, TransactionFrameBasePtr const& v) {
++                                return s + v->getNumOperations();
++                            })
++            + std::accumulate(commutativeTxs.begin(), commutativeTxs.end(), size_t(0),
+                             [](size_t s, TransactionFrameBasePtr const& v) {
+                                 return s + v->getNumOperations();
+                             });
+@@ -1085,53 +1158,19 @@ LedgerManagerImpl::applyTransactions(
+                   ltx.loadHeader().current().ledgerSeq, numTxs, numOps);
+     }
+ 
+-    prefetchTransactionData(txs);
++    prefetchTransactionData(commutativeTxs);
+ 
++    for (auto tx : commutativeTxs) {
++        applyTransaction(tx, ltx, txResultSet, ledgerCloseMeta, index);
++    }
+ 
++    runSpeedex(ltx);
++
++    prefetchTransactionData(noncommutativeTxs);
++
++    for (auto tx : noncommutativeTxs)
++    {
++        applyTransaction(tx, ltx, txResultSet, ledgerCloseMeta, index);
+     }
+ 
+     logTxApplyMetrics(ltx, numTxs, numOps);
+diff --git a/src/ledger/LedgerManagerImpl.h b/src/ledger/LedgerManagerImpl.h
+index 812bd461..6da07a7a 100644
+--- a/src/ledger/LedgerManagerImpl.h
++++ b/src/ledger/LedgerManagerImpl.h
+@@ -69,7 +69,15 @@ class LedgerManagerImpl : public LedgerManager
+                        std::unique_ptr<LedgerCloseMeta> const& ledgerCloseMeta);
+ 
+     void
+-    applyTransactions(std::vector<TransactionFrameBasePtr>& txs,
++    applyTransaction(TransactionFrameBasePtr& tx,
++                     AbstractLedgerTxn& ltx,
++                     TransactionResultSet& txResultSet,
++                     std::unique_ptr<LedgerCloseMeta> const& ledgerCloseMeta,
++                     int& index);
++
++    void
++    applyTransactions(std::vector<TransactionFrameBasePtr>& commutativeTxs,
++                      std::vector<TransactionFrameBasePtr>& noncommutativeTxs,
+                       AbstractLedgerTxn& ltx, TransactionResultSet& txResultSet,
+                       std::unique_ptr<LedgerCloseMeta> const& ledgerCloseMeta);
+ 
+diff --git a/src/ledger/LedgerTxn.cpp b/src/ledger/LedgerTxn.cpp
+index b362afe2..693e7b2a 100644
+--- a/src/ledger/LedgerTxn.cpp
++++ b/src/ledger/LedgerTxn.cpp
+ 
+ #ifdef BEST_OFFER_DEBUGGING
+ void
+@@ -468,6 +456,10 @@ LedgerTxn::Impl::commitChild(EntryIterator iter, LedgerTxnConsistency cons)
+                           : nullptr;
+             updateWorstBestOffer(wboIter.assets(), descPtr);
+         }
++
++        //gather speedex ioc offers
++
++        mSpeedexIOCOrderbooks.commitChild(mChild -> getSpeedexIOCOffers());
+     }
+     catch (std::exception& e)
+     {
+@@ -1434,6 +1426,32 @@ LedgerTxn::Impl::load(LedgerTxn& self, InternalLedgerKey const& key)
+     return ltxe;
+ }
+ 
++std::shared_ptr<const LedgerEntry>
++LedgerTxn::loadSnapshotEntry(LedgerKey const& key) const {
++    return mImpl -> loadSnapshotEntry(key);
++}
++
++std::shared_ptr<const LedgerEntry>
++LedgerTxn::Impl::loadSnapshotEntry(LedgerKey const& key) const
++{
++    //maintain same access validity invariants on snapshots as on regular entries
++    //Does not check if there is a child -- child snapshots are the same as parent snapshots,
++    //as snapshots are not modified until root ledger commits.
++    throwIfSealed();
++
++    auto snapshotIter = mSnapshots.find(key);
++    if (snapshotIter != mSnapshots.end()) {
++        return (snapshotIter->second);
++    }
++
++    auto parentSnapshot = mParent.loadSnapshotEntry(key);
++    if (parentSnapshot) {
++        mSnapshots.emplace(key, parentSnapshot);
++    }
++    return parentSnapshot;
++
++}
++
+ std::map<AccountID, std::vector<LedgerTxnEntry>>
+ LedgerTxn::loadAllOffers()
+ {
+@@ -1617,6 +1635,30 @@ LedgerTxn::Impl::loadOffersByAccountAndAsset(LedgerTxn& self,
+     }
+ }
+ 
++void 
++LedgerTxn::addSpeedexIOCOffer(AssetPair assetPair, const IOCOffer& offer) {
++    getImpl() -> addSpeedexIOCOffer(assetPair, offer);
++}
++
++void
++LedgerTxn::Impl::addSpeedexIOCOffer(AssetPair assetPair, const IOCOffer& offer) {
++    throwIfChild();
++    throwIfSealed();
++    mSpeedexIOCOrderbooks.addOffer(assetPair, offer);
++}
++
++IOCOrderbookManager &
++LedgerTxn::getSpeedexIOCOffers() {
++    return getImpl() -> getSpeedexIOCOffers();
++}
++
++IOCOrderbookManager & 
++LedgerTxn::Impl::getSpeedexIOCOffers() {
++    throwIfChild();
++    //TODO some check to see whether parent has any offers that aren't included here?
++    return mSpeedexIOCOrderbooks;
++}
++
+ std::vector<LedgerTxnEntry>
+ LedgerTxn::loadPoolShareTrustLinesByAccountAndAsset(AccountID const& account,
+                                                     Asset const& asset)
+@@ -1713,7 +1755,9 @@ LedgerTxn::Impl::rollback()
+     }
+ 
+     mEntry.clear();
++    mSnapshots.clear();
+     mMultiOrderBook.clear();
++    mSpeedexIOCOrderbooks.clear();
+     mActive.clear();
+     mActiveHeader.reset();
+     mIsSealed = true;
+@@ -1813,6 +1857,12 @@ LedgerTxn::dropLiquidityPools()
+     throw std::runtime_error("called dropLiquidityPools on non-root LedgerTxn");
+ }
+ 
++void
++LedgerTxn::dropSpeedexConfigs()
++{
++    throw std::runtime_error("called dropSpeedexConfigs on non-root LedgerTxn");
++}
++
+ double
+ LedgerTxn::getPrefetchHitRate() const
+ {
+@@ -2253,6 +2303,7 @@ LedgerTxnRoot::Impl::Impl(Database& db, size_t entryCacheSize,
+     , mDatabase(db)
+     , mHeader(std::make_unique<LedgerHeader>())
+     , mEntryCache(entryCacheSize)
++    , mSnapshotCache(entryCacheSize)
+     , mBulkLoadBatchSize(prefetchBatchSize)
+     , mChild(nullptr)
+ #ifdef BEST_OFFER_DEBUGGING
+@@ -2314,6 +2365,15 @@ LedgerTxnRoot::Impl::throwIfChild() const
+     }
+ }
+ 
++void 
++LedgerTxnRoot::Impl::clearAllCaches() const
++{
++    mEntryCache.clear();
++    mBestOffers.clear();
++    mSnapshotCache.clear();
++}
++
++
+ void
+ LedgerTxnRoot::commitChild(EntryIterator iter, LedgerTxnConsistency cons)
+ {
+@@ -2359,6 +2419,9 @@ BulkLedgerEntryChangeAccumulator::accumulate(EntryIterator const& iter)
+     case LIQUIDITY_POOL:
+         accum(iter, mLiquidityPoolToUpsert, mLiquidityPoolToDelete);
+         break;
++    case SPEEDEX_CONFIG:
++        accum(iter, mSpeedexConfigToUpsert, mSpeedexConfigToDelete);
++        break;
+     default:
+         abort();
+     }
+@@ -2441,6 +2504,18 @@ LedgerTxnRoot::Impl::bulkApply(BulkLedgerEntryChangeAccumulator& bleca,
+         bulkDeleteLiquidityPool(deleteLiquidityPool, cons);
+         deleteLiquidityPool.clear();
+     }
++    auto& upsertSpeedexConfig = bleca.getSpeedexConfigToUpsert();
++    if (upsertSpeedexConfig.size() > bufferThreshold)
++    {
++        bulkUpsertSpeedexConfig(upsertSpeedexConfig);
++        upsertSpeedexConfig.clear();
++    }
++    auto& deleteSpeedexConfig = bleca.getSpeedexConfigToDelete();
++    if (deleteSpeedexConfig.size() > bufferThreshold)
++    {
++        bulkDeleteSpeedexConfig(deleteSpeedexConfig, cons);
++        deleteSpeedexConfig.clear();
++    }
+ }
+ 
+ void
+
+@@ -2490,6 +2567,7 @@ LedgerTxnRoot::Impl::commitChild(EntryIterator iter, LedgerTxnConsistency cons)
+     // Clearing the cache does not throw
+     mBestOffers.clear();
+     mEntryCache.clear();
++    mSnapshotCache.clear();
+ 
+     // std::unique_ptr<...>::reset does not throw
+     mTransaction.reset();
+@@ -2626,6 +2704,12 @@ LedgerTxnRoot::dropLiquidityPools()
+     mImpl->dropLiquidityPools();
+ }
+ 
++void
++LedgerTxnRoot::dropSpeedexConfigs()
++{
++    mImpl -> dropSpeedexConfigs();
++}
++
+ uint32_t
+ LedgerTxnRoot::prefetch(UnorderedSet<LedgerKey> const& keys)
+ {
+@@ -2644,6 +2728,7 @@ LedgerTxnRoot::Impl::prefetch(UnorderedSet<LedgerKey> const& keys)
+     UnorderedSet<LedgerKey> data;
+     UnorderedSet<LedgerKey> claimablebalance;
+     UnorderedSet<LedgerKey> liquiditypool;
++    UnorderedSet<LedgerKey> speedexConfig;
+ 
+     auto cacheResult =
+         [&](UnorderedMap<LedgerKey, std::shared_ptr<LedgerEntry const>> const&
+@@ -2715,6 +2800,14 @@ LedgerTxnRoot::Impl::prefetch(UnorderedSet<LedgerKey> const& keys)
+                 liquiditypool.clear();
+             }
+             break;
++        case SPEEDEX_CONFIG:
++            insertIfNotLoaded(speedexConfig, key);
++            if (speedexConfig.size() == mBulkLoadBatchSize)
++            {
++                cacheResult(bulkLoadSpeedexConfig(speedexConfig));
++                speedexConfig.clear();
++            }
++            break;
+         }
+     }
+ 
+@@ -2725,6 +2818,7 @@ LedgerTxnRoot::Impl::prefetch(UnorderedSet<LedgerKey> const& keys)
+     cacheResult(bulkLoadData(data));
+     cacheResult(bulkLoadClaimableBalance(claimablebalance));
+     cacheResult(bulkLoadLiquidityPool(liquiditypool));
++    cacheResult(bulkLoadSpeedexConfig(speedexConfig));
+ 
+     return total;
+ }
+
+@@ -3217,19 +3311,19 @@ LedgerTxnRoot::Impl::getNewestVersion(InternalLedgerKey const& gkey) const
+         case LIQUIDITY_POOL:
+             entry = loadLiquidityPool(key);
+             break;
++        case SPEEDEX_CONFIG:
++            //Note that the mocking of the config makes it as though
++            // logically, there exists a speedex config at genesis.
++            // This breaks tests that assume keys don't exist until
++            // they're created.
++            entry = loadSpeedexConfig(key);
++            break;
+         default:
+             throw std::runtime_error("Unknown key type");
+         }
+     }
+-    catch (NonSociRelatedException& e)
++    catch (NonSociRelatedException&)
+     {
+-        if (getHeader().ledgerVersion <= 14)
+-        {
+-            printErrorAndAbort(
+-                "fatal error when loading ledger entry from LedgerTxnRoot: ",
+-                e.what());
+-        }
+-
+         throw;
+     }
+     catch (std::exception& e)
+@@ -3255,6 +3349,93 @@ LedgerTxnRoot::Impl::getNewestVersion(InternalLedgerKey const& gkey) const
+     }
+ }
+ 
++
++std::shared_ptr<const LedgerEntry>
++LedgerTxnRoot::loadSnapshotEntry(LedgerKey const& key) const {
++    return mImpl -> loadSnapshotEntry(key);
++}
++
++std::shared_ptr<const LedgerEntry>
++LedgerTxnRoot::Impl::loadSnapshotEntry(LedgerKey const& key) const {
++    
++    ZoneScoped;
++
++    if (mSnapshotCache.exists(key))
++    {
++        std::string zoneTxt("hit");
++        ZoneText(zoneTxt.c_str(), zoneTxt.size());
++        std::printf("getting from cache\n");
++        return getFromSnapshotCache(key);
++    }
++    else
++    {
++        std::string zoneTxt("miss");
++        ZoneText(zoneTxt.c_str(), zoneTxt.size());
++        ++mPrefetchMisses;
++    }
++
++    std::shared_ptr<LedgerEntry const> entry;
++    try
++    {
++        switch (key.type())
++        {
++        case ACCOUNT:
++            entry = loadAccount(key);
++            break;
++        case DATA:
++            entry = loadData(key);
++            break;
++        case OFFER:
++            entry = loadOffer(key);
++            break;
++        case TRUSTLINE:
++            entry = loadTrustLine(key);
++            break;
++        case CLAIMABLE_BALANCE:
++            entry = loadClaimableBalance(key);
++            break;
++        case LIQUIDITY_POOL:
++            entry = loadLiquidityPool(key);
++            break;
++        case SPEEDEX_CONFIG:
++            std::printf("loaded speedex config from db\n");
++            entry = loadSpeedexConfig(key);
++            break;
++        default:
++            throw std::runtime_error("Unknown key type");
++        }
++    }
++    catch (NonSociRelatedException& e)
++    {
++        if (getHeader().ledgerVersion <= 14)
++        {
++            printErrorAndAbort(
++                "fatal error when loading ledger entry from LedgerTxnRoot: ",
++                e.what());
++        }
++
++        throw;
++    }
++    catch (std::exception& e)
++    {
++        printErrorAndAbort(
++            "fatal error when loading ledger entry from LedgerTxnRoot: ",
++            e.what());
++    }
++    catch (...)
++    {
++        printErrorAndAbort("unknown fatal error when loading ledger entry from "
++                           "LedgerTxnRoot");
++    }
++
++    if (entry) {
++        putInSnapshotCache(key, entry);
++    }
++
++    return entry;
++}
++
++
+ void
+ LedgerTxnRoot::rollbackChild()
+ {
+@@ -3312,6 +3493,20 @@ LedgerTxnRoot::Impl::getFromEntryCache(LedgerKey const& key) const
+     }
+ }
+ 
++std::shared_ptr<LedgerEntry const>
++LedgerTxnRoot::Impl::getFromSnapshotCache(LedgerKey const& key) const
++{
++    try
++    {
++        return mSnapshotCache.get(key);
++    }
++    catch (...)
++    {
++        mSnapshotCache.clear();
++        throw;
++    }
++}
++
+ void
+ LedgerTxnRoot::Impl::putInEntryCache(
+     LedgerKey const& key, std::shared_ptr<LedgerEntry const> const& entry,
+@@ -3328,6 +3523,21 @@ LedgerTxnRoot::Impl::putInEntryCache(
+     }
+ }
+ 
++void
++LedgerTxnRoot::Impl::putInSnapshotCache(
++    LedgerKey const& key, std::shared_ptr<LedgerEntry const> const& entry) const
++{
++    try
++    {
++        mSnapshotCache.put(key, entry);
++    }
++    catch (...)
++    {
++        mSnapshotCache.clear();
++        throw;
++    }
++}
++
+ LedgerTxnRoot::Impl::BestOffersEntryPtr
+ LedgerTxnRoot::Impl::getFromBestOffers(Asset const& buying,
+                                        Asset const& selling) const
+diff --git a/src/ledger/LedgerTxn.h b/src/ledger/LedgerTxn.h
+index df743227..bbf549f0 100644
+--- a/src/ledger/LedgerTxn.h
++++ b/src/ledger/LedgerTxn.h
+@@ -408,6 +399,10 @@ class AbstractLedgerTxnParent
+     virtual std::shared_ptr<InternalLedgerEntry const>
+     getNewestVersion(InternalLedgerKey const& key) const = 0;
+ 
++
++    virtual std::shared_ptr<const LedgerEntry>
++    loadSnapshotEntry(LedgerKey const& key) const = 0;
++
+     // Return the count of the number of ledger objects of type `let`. Will
+     // throw when called on anything other than a (real or stub) root LedgerTxn.
+     virtual uint64_t countObjects(LedgerEntryType let) const = 0;
+@@ -418,6 +413,10 @@ class AbstractLedgerTxnParent
+     virtual uint64_t countObjects(LedgerEntryType let,
+                                   LedgerRange const& ledgers) const = 0;
+ 
++    // Return batch of accumulated speedex offers
++    //virtual IOCOrderbookManager const&
++    //getSpeedexIOCOffers() const = 0;
++
+     // Delete all ledger entries modified on-or-after `ledger`. Will throw
+     // when called on anything other than a (real or stub) root LedgerTxn.
+     virtual void
+@@ -447,6 +446,11 @@ class AbstractLedgerTxnParent
+     // anything other than a (real or stub) root LedgerTxn.
+     virtual void dropLiquidityPools() = 0;
+ 
++
++    // Delete all speedex config ledger entries. Will throw when called on
++    // anything other than a (real or stub) root LedgerTxn.
++    virtual void dropSpeedexConfigs() = 0;
++
+     // Return the current cache hit rate for prefetched ledger entries, as a
+     // fraction from 0.0 to 1.0. Will throw when called on anything other than a
+     // (real or stub) root LedgerTxn.
+@@ -530,6 +534,7 @@ class AbstractLedgerTxn : public AbstractLedgerTxnParent
+     virtual LedgerTxnEntry create(InternalLedgerEntry const& entry) = 0;
+     virtual void erase(InternalLedgerKey const& key) = 0;
+     virtual LedgerTxnEntry load(InternalLedgerKey const& key) = 0;
++
+     virtual ConstLedgerTxnEntry
+     loadWithoutRecord(InternalLedgerKey const& key) = 0;
+ 
+@@ -598,6 +603,10 @@ class AbstractLedgerTxn : public AbstractLedgerTxnParent
+     loadOffersByAccountAndAsset(AccountID const& accountID,
+                                 Asset const& asset) = 0;
+ 
++    virtual IOCOrderbookManager &
++    getSpeedexIOCOffers() = 0;
++
++    virtual void addSpeedexIOCOffer(AssetPair assetPair, const IOCOffer& offer) = 0;
+     // Loads every pool share trust line owned by the specified account that
+     // contains the specified asset. This function is built on top of load, so
+     // it shares many properties with that function.
+@@ -669,6 +678,7 @@ class LedgerTxn : public AbstractLedgerTxn
+     getOffersByAccountAndAsset(AccountID const& account,
+                                Asset const& asset) override;
+ 
++    // ok why is there a getHeader and a loadHeader method
+     UnorderedMap<LedgerKey, LedgerEntry>
+     getPoolShareTrustLinesByAccountAndAsset(AccountID const& account,
+                                             Asset const& asset) override;
+@@ -690,6 +700,15 @@ class LedgerTxn : public AbstractLedgerTxn
+ 
+     LedgerTxnEntry load(InternalLedgerKey const& key) override;
+ 
++    IOCOrderbookManager&
++    getSpeedexIOCOffers() override;
++
++    void addSpeedexIOCOffer(AssetPair assetPair, const IOCOffer& offer) override;
++
++
++    std::shared_ptr<const LedgerEntry>
++    loadSnapshotEntry(LedgerKey const& key) const override;
++
+     void
+     createOrUpdateWithoutLoading(InternalLedgerEntry const& entry) override;
+     void eraseWithoutLoading(InternalLedgerKey const& key) override;
+@@ -728,6 +747,7 @@ class LedgerTxn : public AbstractLedgerTxn
+     void dropTrustLines() override;
+     void dropClaimableBalances() override;
+     void dropLiquidityPools() override;
++    void dropSpeedexConfigs() override;
+     double getPrefetchHitRate() const override;
+     uint32_t prefetch(UnorderedSet<LedgerKey> const& keys) override;
+ 
+@@ -785,6 +805,10 @@ class LedgerTxnRoot : public AbstractLedgerTxnParent
+     void dropTrustLines() override;
+     void dropClaimableBalances() override;
+     void dropLiquidityPools() override;
++    void dropSpeedexConfigs() override;
++
++    std::shared_ptr<const LedgerEntry>
++    loadSnapshotEntry(LedgerKey const& key) const override;
+ 
+ #ifdef BUILD_TESTS
+     void resetForFuzzer() override;
+@@ -802,6 +826,8 @@ class LedgerTxnRoot : public AbstractLedgerTxnParent
+     getOffersByAccountAndAsset(AccountID const& account,
+                                Asset const& asset) override;
+ 
++    //IOCOrderbookManager const&
++    //getSpeedexIOCOffers() const override;
+     UnorderedMap<LedgerKey, LedgerEntry>
+     getPoolShareTrustLinesByAccountAndAsset(AccountID const& account,
+                                             Asset const& asset) override;
+diff --git a/src/ledger/LedgerTxnAccountSQL.cpp b/src/ledger/LedgerTxnAccountSQL.cpp
+index 6913d31a..55926508 100644
+--- a/src/ledger/LedgerTxnAccountSQL.cpp
++++ b/src/ledger/LedgerTxnAccountSQL.cpp
+@@ -461,8 +461,7 @@ void
+ LedgerTxnRoot::Impl::dropAccounts()
+ {
+     throwIfChild();
+-    mEntryCache.clear();
+-    mBestOffers.clear();
++    clearAllCaches();
+ 
+     mDatabase.getSession() << "DROP TABLE IF EXISTS accounts;";
+     mDatabase.getSession() << "DROP TABLE IF EXISTS signers;";
+diff --git a/src/ledger/LedgerTxnClaimableBalanceSQL.cpp b/src/ledger/LedgerTxnClaimableBalanceSQL.cpp
+index 28f64056..18ccd386 100644
+--- a/src/ledger/LedgerTxnClaimableBalanceSQL.cpp
++++ b/src/ledger/LedgerTxnClaimableBalanceSQL.cpp
+@@ -353,9 +353,8 @@ void
+ LedgerTxnRoot::Impl::dropClaimableBalances()
+ {
+     throwIfChild();
+-    mEntryCache.clear();
+-    mBestOffers.clear();
+-
++    clearAllCaches();
++    
+     std::string coll = mDatabase.getSimpleCollationClause();
+ 
+     mDatabase.getSession() << "DROP TABLE IF EXISTS claimablebalance;";
+diff --git a/src/ledger/LedgerTxnDataSQL.cpp b/src/ledger/LedgerTxnDataSQL.cpp
+index 597ba68f..3d0fd1c1 100644
+--- a/src/ledger/LedgerTxnDataSQL.cpp
++++ b/src/ledger/LedgerTxnDataSQL.cpp
+@@ -319,8 +319,7 @@ void
+ LedgerTxnRoot::Impl::dropData()
+ {
+     throwIfChild();
+-    mEntryCache.clear();
+-    mBestOffers.clear();
++    clearAllCaches();
+ 
+     std::string coll = mDatabase.getSimpleCollationClause();
+ 
+diff --git a/src/ledger/LedgerTxnImpl.h b/src/ledger/LedgerTxnImpl.h
+index 1c1e4fbb..3846aa97 100644
+--- a/src/ledger/LedgerTxnImpl.h
++++ b/src/ledger/LedgerTxnImpl.h
+@@ -86,6 +86,8 @@ class BulkLedgerEntryChangeAccumulator
+     std::vector<EntryIterator> mTrustLinesToDelete;
+     std::vector<EntryIterator> mLiquidityPoolToUpsert;
+     std::vector<EntryIterator> mLiquidityPoolToDelete;
++    std::vector<EntryIterator> mSpeedexConfigToUpsert;
++    std::vector<EntryIterator> mSpeedexConfigToDelete;
+ 
+   public:
+     std::vector<EntryIterator>&
+@@ -160,6 +162,16 @@ class BulkLedgerEntryChangeAccumulator
+         return mLiquidityPoolToDelete;
+     }
+ 
++    std::vector<EntryIterator>&
++    getSpeedexConfigToUpsert() {
++        return mSpeedexConfigToUpsert;
++    }
++
++    std::vector<EntryIterator>&
++    getSpeedexConfigToDelete() {
++        return mSpeedexConfigToDelete;
++    }
++
+     void accumulate(EntryIterator const& iter);
+ };
+ 
+@@ -182,11 +194,17 @@ class LedgerTxn::Impl
+                          std::shared_ptr<InternalLedgerEntry>>
+         EntryMap;
+ 
++    typedef UnorderedMap<LedgerKey,
++                          std::shared_ptr<const LedgerEntry>>
++        SnapshotEntryMap;
++
+     AbstractLedgerTxnParent& mParent;
+     AbstractLedgerTxn* mChild;
+     std::unique_ptr<LedgerHeader> mHeader;
+     std::shared_ptr<LedgerTxnHeader::Impl> mActiveHeader;
+     EntryMap mEntry;
++    mutable SnapshotEntryMap mSnapshots;
++
+     UnorderedMap<InternalLedgerKey, std::shared_ptr<EntryImplBase>> mActive;
+     bool const mShouldUpdateLastModified;
+     bool mIsSealed;
+@@ -221,6 +239,8 @@ class LedgerTxn::Impl
+     //     re-synchronizes an entry in mMultiOrderbook with mEntry/mActive.
+     MultiOrderBook mMultiOrderBook;
+ 
++    IOCOrderbookManager mSpeedexIOCOrderbooks;
++
+     // The WorstBestOfferMap is a cache which retains, for each asset pair, the
+     // worst value (including possibly nullptr) returned from calling
+     // loadBestOffer on this LedgerTxn. Each time we call loadBestOffer, we call
+@@ -545,6 +565,14 @@ class LedgerTxn::Impl
+     // - the entry cache may be, but is not guaranteed to be, cleared.
+     LedgerTxnEntry load(LedgerTxn& self, InternalLedgerKey const& key);
+ 
++    void addSpeedexIOCOffer(AssetPair assetPair, const IOCOffer& offer);
++
++    IOCOrderbookManager& 
++    getSpeedexIOCOffers();
++
++    std::shared_ptr<const LedgerEntry>
++    loadSnapshotEntry(LedgerKey const& key) const;
++
+     // createOrUpdateWithoutLoading has the strong exception safety guarantee.
+     // If it throws an exception, then the current LedgerTxn::Impl is unchanged.
+     void createOrUpdateWithoutLoading(LedgerTxn& self,
+@@ -707,6 +735,7 @@ class LedgerTxnRoot::Impl
+     };
+ 
+     typedef RandomEvictionCache<LedgerKey, CacheEntry> EntryCache;
++    typedef RandomEvictionCache<LedgerKey, std::shared_ptr<const LedgerEntry>> SnapshotCache;
+ 
+     typedef AssetPair BestOffersKey;
+ 
+@@ -726,6 +755,7 @@ class LedgerTxnRoot::Impl
+     Database& mDatabase;
+     std::unique_ptr<LedgerHeader> mHeader;
+     mutable EntryCache mEntryCache;
++    mutable SnapshotCache mSnapshotCache;
+     mutable BestOffers mBestOffers;
+     mutable uint64_t mPrefetchHits{0};
+     mutable uint64_t mPrefetchMisses{0};
+@@ -738,6 +768,8 @@ class LedgerTxnRoot::Impl
+     bool const mBestOfferDebuggingEnabled;
+ #endif
+ 
++    void clearAllCaches() const;
++
+     void throwIfChild() const;
+ 
+     std::shared_ptr<LedgerEntry const> loadAccount(LedgerKey const& key) const;
+@@ -769,6 +801,9 @@ class LedgerTxnRoot::Impl
+     std::shared_ptr<LedgerEntry const>
+     loadLiquidityPool(LedgerKey const& key) const;
+ 
++    std::shared_ptr<LedgerEntry const>
++    loadSpeedexConfig(LedgerKey const& key) const;
++
+     void bulkApply(BulkLedgerEntryChangeAccumulator& bleca,
+                    size_t bufferThreshold, LedgerTxnConsistency cons);
+     void bulkUpsertAccounts(std::vector<EntryIterator> const& entries);
+@@ -790,6 +825,10 @@ class LedgerTxnRoot::Impl
+     void bulkDeleteLiquidityPool(std::vector<EntryIterator> const& entries,
+                                  LedgerTxnConsistency cons);
+ 
++    void bulkUpsertSpeedexConfig(std::vector<EntryIterator> const& entries);
++    void bulkDeleteSpeedexConfig(std::vector<EntryIterator> const& entries,
++                                 LedgerTxnConsistency cons);
++
+     static std::string tableFromLedgerEntryType(LedgerEntryType let);
+ 
+     // The entry cache maintains relatively strong invariants:
+@@ -811,6 +850,15 @@ class LedgerTxnRoot::Impl
+                          std::shared_ptr<LedgerEntry const> const& entry,
+                          LoadType type) const;
+ 
++    // The snapshot cache maintains a cache of entries as they appeared at
++    // the start of the ledger transaction.
++    // Cleared when commitChild is called (to ensure reads are from start
++    // of current transaction, not a past transaction).
++    std::shared_ptr<LedgerEntry const>
++    getFromSnapshotCache(LedgerKey const& key) const;
++    void putInSnapshotCache(LedgerKey const& key,
++                         std::shared_ptr<LedgerEntry const> const& entry) const;
++
+     BestOffersEntryPtr getFromBestOffers(Asset const& buying,
+                                          Asset const& selling) const;
+ 
+@@ -826,6 +874,9 @@ class LedgerTxnRoot::Impl
+     bulkLoadClaimableBalance(UnorderedSet<LedgerKey> const& keys) const;
+     UnorderedMap<LedgerKey, std::shared_ptr<LedgerEntry const>>
+     bulkLoadLiquidityPool(UnorderedSet<LedgerKey> const& keys) const;
++    UnorderedMap<LedgerKey, std::shared_ptr<LedgerEntry const>>
++    bulkLoadSpeedexConfig(UnorderedSet<LedgerKey> const& keys) const;
++
+ 
+     std::deque<LedgerEntry>::const_iterator
+     loadNextBestOffersIntoCache(BestOffersEntryPtr cached, Asset const& buying,
+@@ -869,6 +920,10 @@ class LedgerTxnRoot::Impl
+     void dropTrustLines();
+     void dropClaimableBalances();
+     void dropLiquidityPools();
++    void dropSpeedexConfigs();
++
++    std::shared_ptr<const LedgerEntry>
++    loadSnapshotEntry(LedgerKey const& key) const;
+ 
+ #ifdef BUILD_TESTS
+     void resetForFuzzer();
+diff --git a/src/ledger/LedgerTxnLiquidityPoolSQL.cpp b/src/ledger/LedgerTxnLiquidityPoolSQL.cpp
+index 57fc3d79..7a8c6a3a 100644
+--- a/src/ledger/LedgerTxnLiquidityPoolSQL.cpp
++++ b/src/ledger/LedgerTxnLiquidityPoolSQL.cpp
+@@ -389,8 +389,7 @@ void
+ LedgerTxnRoot::Impl::dropLiquidityPools()
+ {
+     throwIfChild();
+-    mEntryCache.clear();
+-    mBestOffers.clear();
++    clearAllCaches();
+ 
+     std::string coll = mDatabase.getSimpleCollationClause();
+ 
+diff --git a/src/ledger/LedgerTxnOfferSQL.cpp b/src/ledger/LedgerTxnOfferSQL.cpp
+index d1262876..7a6d2b5a 100644
+--- a/src/ledger/LedgerTxnOfferSQL.cpp
++++ b/src/ledger/LedgerTxnOfferSQL.cpp
+@@ -653,8 +653,7 @@ void
+ LedgerTxnRoot::Impl::dropOffers()
+ {
+     throwIfChild();
+-    mEntryCache.clear();
+-    mBestOffers.clear();
++    clearAllCaches();
+ 
+     std::string coll = mDatabase.getSimpleCollationClause();
+diff --git a/src/ledger/LedgerTxnTrustLineSQL.cpp b/src/ledger/LedgerTxnTrustLineSQL.cpp
+index ce64f704..0e7c4806 100644
+--- a/src/ledger/LedgerTxnTrustLineSQL.cpp
++++ b/src/ledger/LedgerTxnTrustLineSQL.cpp
+@@ -350,8 +350,7 @@ void
+ LedgerTxnRoot::Impl::dropTrustLines()
+ {
+     throwIfChild();
+-    mEntryCache.clear();
+-    mBestOffers.clear();
++    clearAllCaches();
+ 
+     std::string coll = mDatabase.getSimpleCollationClause();
+ 
+diff --git a/src/ledger/TrustLineWrapper.cpp b/src/ledger/TrustLineWrapper.cpp
+index 356a3183..36cbe476 100644
+--- a/src/ledger/TrustLineWrapper.cpp
++++ b/src/ledger/TrustLineWrapper.cpp
+@@ -36,6 +36,8 @@ class TrustLineWrapper::NonIssuerImpl : public TrustLineWrapper::AbstractImpl
+     bool isAuthorized() const override;
+     bool isAuthorizedToMaintainLiabilities() const override;
+     bool isClawbackEnabled() const override;
++    bool isCommutativeTxEnabledTrustLine() const override;
++    //bool issuerExists(AbstractLedgerTxn& ltx) const override;
+ 
+     int64_t getAvailableBalance(LedgerTxnHeader const& header) const override;
+ 
+@@ -47,8 +49,10 @@ class TrustLineWrapper::IssuerImpl : public TrustLineWrapper::AbstractImpl
+     AccountID const mAccountID;
+     Asset const mAsset;
+ 
++    LedgerTxnEntry mEntry;
++
+   public:
+-    IssuerImpl(AccountID const& accountID, Asset const& asset);
++    IssuerImpl(AccountID const& accountID, Asset const& asset, LedgerTxnEntry&& entry);
+ 
+     operator bool() const override;
+ 
+@@ -66,6 +70,8 @@ class TrustLineWrapper::IssuerImpl : public TrustLineWrapper::AbstractImpl
+     bool isAuthorized() const override;
+     bool isAuthorizedToMaintainLiabilities() const override;
+     bool isClawbackEnabled() const override;
++    bool isCommutativeTxEnabledTrustLine() const override;
++   // bool issuerExists(AbstractLedgerTxn& ltx) const override;
+ 
+     int64_t getAvailableBalance(LedgerTxnHeader const& header) const override;
+ 
+@@ -99,7 +105,10 @@ TrustLineWrapper::TrustLineWrapper(AbstractLedgerTxn& ltx,
+     }
+     else
+     {
+-        mImpl = std::make_unique<IssuerImpl>(accountID, asset);
++        LedgerKey key(ACCOUNT);
++        key.account().accountID = accountID;
++        auto entry = ltx.load(key);
++        mImpl = std::make_unique<IssuerImpl>(accountID, asset, std::move(entry));
+     }
+ }
+ 
+@@ -109,6 +118,8 @@ TrustLineWrapper::TrustLineWrapper(LedgerTxnEntry&& entry)
+     {
+         mImpl = std::make_unique<NonIssuerImpl>(std::move(entry));
+     }
++    //TODO check entry type to determine issuer or nonissuer?
++    // I do not believe this to be necessary.
+ }
+ 
+ TrustLineWrapper::operator bool() const
+@@ -172,6 +183,17 @@ TrustLineWrapper::isClawbackEnabled() const
+     return getImpl()->isClawbackEnabled();
+ }
+ 
++bool
++TrustLineWrapper::isCommutativeTxEnabledTrustLine() const {
++    return getImpl()->isCommutativeTxEnabledTrustLine();
++}
++
++
+ int64_t
+ TrustLineWrapper::getAvailableBalance(LedgerTxnHeader const& header) const
+ {
+@@ -270,6 +292,27 @@ TrustLineWrapper::NonIssuerImpl::isClawbackEnabled() const
+     return stellar::isClawbackEnabledOnTrustline(mEntry);
+ }
+ 
++bool
++TrustLineWrapper::NonIssuerImpl::isCommutativeTxEnabledTrustLine() const {
++    return stellar::isCommutativeTxEnabledTrustLine(mEntry);
++}
++
+ int64_t
+ TrustLineWrapper::NonIssuerImpl::getAvailableBalance(
+     LedgerTxnHeader const& header) const
+@@ -286,8 +329,9 @@ TrustLineWrapper::NonIssuerImpl::getMaxAmountReceive(
+ 
+ // Implementation of TrustLineWrapper::IssuerImpl -----------------------------
+ TrustLineWrapper::IssuerImpl::IssuerImpl(AccountID const& accountID,
+-                                         Asset const& asset)
+-    : mAccountID(accountID), mAsset(asset)
++                                         Asset const& asset,
++                                         LedgerTxnEntry&& entry)
++    : mAccountID(accountID), mAsset(asset), mEntry(std::move(entry))
+ {
+ }
+ 
+@@ -299,14 +343,22 @@ TrustLineWrapper::IssuerImpl::operator bool() const
+ int64_t
+ TrustLineWrapper::IssuerImpl::getBalance() const
+ {
+-    return INT64_MAX;
++    if (!mEntry) {
++        // issuer account deleted
++        return INT64_MAX;
++    }
++    return stellar::getRemainingAssetIssuance(mEntry, stellar::getAssetCode(mAsset));
+ }
+ 
+ bool
+ TrustLineWrapper::IssuerImpl::addBalance(LedgerTxnHeader const& header,
+                                          int64_t delta)
+ {
+-    return true;
++    if (!mEntry) {
++        // issuer account deleted
++        return INT64_MAX;
++    }
++    return stellar::issueAsset(mEntry, stellar::getAssetCode(mAsset), -delta);
+ }
+ 
+ int64_t
+@@ -327,14 +379,20 @@ int64_t
+ TrustLineWrapper::IssuerImpl::addBuyingLiabilities(
+     LedgerTxnHeader const& header, int64_t delta)
+ {
+-    return true;
++    if (!mEntry) {
++        return true;
++    }
++    return stellar::issueAsset(mEntry, stellar::getAssetCode(mAsset), delta);
+ }
+ 
+ int64_t
+ TrustLineWrapper::IssuerImpl::addSellingLiabilities(
+     LedgerTxnHeader const& header, int64_t delta)
+ {
+-    return true;
++    if (!mEntry) {
++        return true;
++    }
++    return stellar::issueAsset(mEntry, stellar::getAssetCode(mAsset), delta);
+ }
+ 
+ bool
+@@ -355,17 +413,35 @@ TrustLineWrapper::IssuerImpl::isClawbackEnabled() const
+     throw std::runtime_error("issuer cannot clawback from itself");
+ }
+ 
++bool
++TrustLineWrapper::IssuerImpl::isCommutativeTxEnabledTrustLine() const {
++    // issuer trustline always has limit INT64_MAX and is authorized
++    return true;
++}
++
+ int64_t
+ TrustLineWrapper::IssuerImpl::getAvailableBalance(
+     LedgerTxnHeader const& header) const
+ {
+-    return INT64_MAX;
++    if (!mEntry) {
++        return INT64_MAX;
++
++    }
++    return stellar::getRemainingAssetIssuance(mEntry, stellar::getAssetCode(mAsset));
+ }
+ 
+ int64_t
+ TrustLineWrapper::IssuerImpl::getMaxAmountReceive(
+     LedgerTxnHeader const& header) const
+ {
++    if (!mEntry) {
++        return INT64_MAX;
++    }
++
++    auto issuedAmount = stellar::getIssuedAssetAmount(mEntry, stellar::getAssetCode(mAsset));
++    if (issuedAmount) {
++        return *issuedAmount;
++    }
+     return INT64_MAX;
+ }
+ 
+diff --git a/src/ledger/TrustLineWrapper.h b/src/ledger/TrustLineWrapper.h
+index 3b620c8e..054060c1 100644
+--- a/src/ledger/TrustLineWrapper.h
++++ b/src/ledger/TrustLineWrapper.h
+@@ -11,6 +11,7 @@
+ namespace stellar
+ {
+ 
++class AbstractLedgerTxn;
+ class LedgerTxn;
+ class LedgerTxnHeader;
+ 
+@@ -51,6 +52,11 @@ class TrustLineWrapper
+     bool isAuthorizedToMaintainLiabilities() const;
+     bool isClawbackEnabled() const;
+ 
++    // Just checks trustline settings, not asset settings
++    bool isCommutativeTxEnabledTrustLine() const;
++
+     int64_t getAvailableBalance(LedgerTxnHeader const& header) const;
+ 
+     int64_t getMaxAmountReceive(LedgerTxnHeader const& header) const;
+@@ -88,6 +94,10 @@ class TrustLineWrapper::AbstractImpl
+     virtual bool isAuthorizedToMaintainLiabilities() const = 0;
+     virtual bool isClawbackEnabled() const = 0;
+ 
++    virtual bool isCommutativeTxEnabledTrustLine() const = 0;
++
+     virtual int64_t
+     getAvailableBalance(LedgerTxnHeader const& header) const = 0;
+
+diff --git a/src/transactions/CreateClaimableBalanceOpFrame.cpp b/src/transactions/CreateClaimableBalanceOpFrame.cpp
+index c9f27e39..b7dc8ef7 100644
+--- a/src/transactions/CreateClaimableBalanceOpFrame.cpp
++++ b/src/transactions/CreateClaimableBalanceOpFrame.cpp
+@@ -155,7 +155,6 @@ bool
+ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
+ {
+     auto header = ltx.loadHeader();
+-    auto sourceAccount = loadSourceAccount(ltx, header);
+ 
+     auto const& claimants = mCreateClaimableBalance.claimants;
+ 
+@@ -171,6 +170,8 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
+ 
+     if (asset.type() == ASSET_TYPE_NATIVE)
+     {
++        auto sourceAccount = loadSourceAccount(ltx, header);
++
+         if (getAvailableBalance(header, sourceAccount) < amount)
+         {
+             innerResult().code(CREATE_CLAIMABLE_BALANCE_UNDERFUNDED);
+@@ -182,22 +183,24 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
+     }
+     else
+     {
+-        auto trustline = loadTrustLine(ltx, getSourceID(), asset);
+-        if (!trustline)
+-        {
+-            innerResult().code(CREATE_CLAIMABLE_BALANCE_NO_TRUST);
+-            return false;
+-        }
+-        if (!trustline.isAuthorized())
+         {
+-            innerResult().code(CREATE_CLAIMABLE_BALANCE_NOT_AUTHORIZED);
+-            return false;
+-        }
++            auto trustline = loadTrustLine(ltx, getSourceID(), asset);
++            if (!trustline)
++            {
++                innerResult().code(CREATE_CLAIMABLE_BALANCE_NO_TRUST);
++                return false;
++            }
++            if (!trustline.isAuthorized())
++            {
++                innerResult().code(CREATE_CLAIMABLE_BALANCE_NOT_AUTHORIZED);
++                return false;
++            }
+ 
+-        if (!trustline.addBalance(header, -amount))
+-        {
+-            innerResult().code(CREATE_CLAIMABLE_BALANCE_UNDERFUNDED);
+-            return false;
++            if (!trustline.addBalance(header, -amount))
++            {
++                innerResult().code(CREATE_CLAIMABLE_BALANCE_UNDERFUNDED);
++                return false;
++            }
+         }
+ 
+         if (header.current().ledgerVersion >= 17)
+@@ -205,10 +208,12 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
+             bool enableClawback;
+             if (getSourceID() == getIssuer(asset))
+             {
++                auto sourceAccount = loadSourceAccount(ltx, header);
+                 enableClawback = isClawbackEnabledOnAccount(sourceAccount);
+             }
+             else
+             {
++                auto trustline = loadTrustLine(ltx, getSourceID(), asset);
+                 enableClawback = trustline.isClawbackEnabled();
+             }
+ 
+@@ -230,6 +235,7 @@ CreateClaimableBalanceOpFrame::doApply(AbstractLedgerTxn& ltx)
+         updatePredicatesForApply(claimant.v0().predicate,
+                                  header.current().scpValue.closeTime);
+     }
++    auto sourceAccount = loadSourceAccount(ltx, header);
+ 
+     switch (createEntryWithPossibleSponsorship(ltx, header, newClaimableBalance,
+                                                sourceAccount))
+
+diff --git a/src/transactions/FeeBumpTransactionFrame.cpp b/src/transactions/FeeBumpTransactionFrame.cpp
+index 232a6151..679db9c6 100644
+--- a/src/transactions/FeeBumpTransactionFrame.cpp
++++ b/src/transactions/FeeBumpTransactionFrame.cpp
+@@ -11,6 +11,7 @@
+ #include "ledger/LedgerTxnEntry.h"
+ #include "ledger/LedgerTxnHeader.h"
+ #include "main/Application.h"
++#include "transactions/OperationFrame.h"
+ #include "transactions/SignatureChecker.h"
+ #include "transactions/SignatureUtils.h"
+ #include "transactions/SponsorshipUtils.h"
+@@ -18,6 +19,8 @@
+ #include "util/GlobalChecks.h"
+ #include "xdrpp/marshal.h"
+ 
++#include "herder/TransactionCommutativityRequirements.h"
++
+ #include <numeric>
+ 
+ namespace stellar
+@@ -349,6 +352,57 @@ FeeBumpTransactionFrame::getSourceID() const
+     return mInnerTx->getSourceID();
+ }
+ 
++
++bool 
++FeeBumpTransactionFrame::isCommutativeTransaction() const 
++{
++    return mInnerTx -> isCommutativeTransaction();
++}
++
++bool 
++FeeBumpTransactionFrame::commutativityWellFormednessChecks() const
++{
++    return mInnerTx -> commutativityWellFormednessChecks();
++}
++
++void
++FeeBumpTransactionFrame::addFeeCommutativityRequirement(TransactionCommutativityRequirements& reqs) const
++{
++    auto nativeAsset = getNativeAsset();
++    reqs.addAssetRequirement(getFeeSourceID(), nativeAsset, getFeeBid());
++}
++
++std::optional<TransactionCommutativityRequirements>
++FeeBumpTransactionFrame::getCommutativityRequirementsNoFees(AbstractLedgerTxn& ltx) const
++{
++    return mInnerTx -> getCommutativityRequirementsNoFees(ltx);
++}
++
++std::optional<TransactionCommutativityRequirements>
++FeeBumpTransactionFrame::getCommutativityRequirements(AbstractLedgerTxn& ltx) const
++{
++    auto reqs = getCommutativityRequirementsNoFees(ltx);
++    if (!reqs)
++    {
++        return std::nullopt;
++    }
++
++    addFeeCommutativityRequirement(*reqs);
++
++    return reqs;
++}
++
++UnorderedSet<AccountID>
++FeeBumpTransactionFrame::getRelevantAccounts() const 
++{
++    auto relevantAccounts = UnorderedSet<AccountID>({getFeeSourceID()});
++    for (auto const& op : mInnerTx->getOperations()) {
++        relevantAccounts.insert(op->getSourceID());
++    }
++
++    return relevantAccounts;
++}
++
+ void
+ FeeBumpTransactionFrame::insertKeysForFeeProcessing(
+     UnorderedSet<LedgerKey>& keys) const
+diff --git a/src/transactions/FeeBumpTransactionFrame.h b/src/transactions/FeeBumpTransactionFrame.h
+index 1ae4b29d..751c13e8 100644
+--- a/src/transactions/FeeBumpTransactionFrame.h
++++ b/src/transactions/FeeBumpTransactionFrame.h
+@@ -11,6 +11,7 @@ namespace stellar
+ class AbstractLedgerTxn;
+ class Application;
+ class SignatureChecker;
++class TransactionCommutativityRequirements;
+ 
+ class FeeBumpTransactionFrame : public TransactionFrameBase
+ {
+@@ -83,6 +84,21 @@ class FeeBumpTransactionFrame : public TransactionFrameBase
+     AccountID getFeeSourceID() const override;
+     AccountID getSourceID() const override;
+ 
++    
++    bool isCommutativeTransaction() const override;
++    bool commutativityWellFormednessChecks() const override;
++
++    void addFeeCommutativityRequirement(TransactionCommutativityRequirements& reqs) const;
++
++    std::optional<TransactionCommutativityRequirements>
++    getCommutativityRequirementsNoFees(AbstractLedgerTxn& ltx) const override;
++
++    std::optional<TransactionCommutativityRequirements>
++    getCommutativityRequirements(AbstractLedgerTxn& ltx) const override;
++
++    UnorderedSet<AccountID>
++    getRelevantAccounts() const override;
++
+     void
+     insertKeysForFeeProcessing(UnorderedSet<LedgerKey>& keys) const override;
+     void insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const override;
+
+diff --git a/src/transactions/ManageOfferOpFrameBase.cpp b/src/transactions/ManageOfferOpFrameBase.cpp
+index 061a1697..1625b554 100644
+--- a/src/transactions/ManageOfferOpFrameBase.cpp
++++ b/src/transactions/ManageOfferOpFrameBase.cpp
+@@ -44,7 +44,6 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter)
+ 
+     if (mSheep.type() != ASSET_TYPE_NATIVE)
+     {
+-        auto sheepLineA = loadTrustLine(ltx, getSourceID(), mSheep);
+         if (ledgerVersion < 13)
+         {
+             auto issuer = stellar::loadAccount(ltx, getIssuer(mSheep));
+@@ -54,6 +53,7 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter)
+                 return false;
+             }
+         }
++        auto sheepLineA = loadTrustLine(ltx, getSourceID(), mSheep);
+         if (!sheepLineA)
+         { // we don't have what we are trying to sell
+             setResultSellNoTrust();
+@@ -74,7 +74,6 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter)
+ 
+     if (mWheat.type() != ASSET_TYPE_NATIVE)
+     {
+-        auto wheatLineA = loadTrustLine(ltx, getSourceID(), mWheat);
+ 
+         if (ledgerVersion < 13)
+         {
+@@ -85,6 +84,9 @@ ManageOfferOpFrameBase::checkOfferValid(AbstractLedgerTxn& ltxOuter)
+                 return false;
+             }
+         }
++
++        auto wheatLineA = loadTrustLine(ltx, getSourceID(), mWheat);
++
+         if (!wheatLineA)
+         { // we can't hold what we are trying to buy
+             setResultBuyNoTrust();
+@@ -109,13 +111,14 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
+     LedgerTxn ltx(ltxOuter); // ltx will always be rolled back
+ 
+     auto header = ltx.loadHeader();
+-    auto sourceAccount = loadSourceAccount(ltx, header);
++  // auto sourceAccount = loadSourceAccount(ltx, header);
+ 
+     auto ledgerVersion = header.current().ledgerVersion;
+     if (ledgerVersion < 14 && creatingNewOffer &&
+         (ledgerVersion >= 10 ||
+          (mSheep.type() == ASSET_TYPE_NATIVE && ledgerVersion > 8)))
+     {
++        auto sourceAccount = loadSourceAccount(ltx, header);
+         // we need to compute maxAmountOfSheepCanSell based on the
+         // updated reserve to avoid selling too many and falling
+         // below the reserve when we try to create the offer later on
+@@ -140,13 +143,26 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
+         createEntryWithoutSponsorship(le, sourceAccount.current());
+     }
+ 
+-    auto sheepLineA = loadTrustLineIfNotNative(ltx, getSourceID(), mSheep);
+-    auto wheatLineA = loadTrustLineIfNotNative(ltx, getSourceID(), mWheat);
++    //auto sheepLineA = loadTrustLineIfNotNative(ltx, getSourceID(), mSheep);
++    //auto wheatLineA = loadTrustLineIfNotNative(ltx, getSourceID(), mWheat);
++
++    auto sourceLoader = [&] () -> LedgerTxnEntry {
++        return loadSourceAccount(ltx, header);
++    };
++
++    auto trustLineLoader = [&] (Asset const& asset) {
++        return loadTrustLineIfNotNative(ltx, getSourceID(), asset);
++    };
++
++    //maxWheatReceive = canBuyAtMost(header, sourceAccount, mWheat, wheatLineA);
++    maxWheatReceive = canBuyAtMost(header, mWheat, sourceLoader, trustLineLoader);
++    //maxSheepSend = canSellAtMost(header, sourceAccount, mSheep, sheepLineA);
++    maxSheepSend = canSellAtMost(header, mSheep, sourceLoader, trustLineLoader);
+ 
+-    maxWheatReceive = canBuyAtMost(header, sourceAccount, mWheat, wheatLineA);
+-    maxSheepSend = canSellAtMost(header, sourceAccount, mSheep, sheepLineA);
+     if (ledgerVersion >= 10)
+     {
++        // no need to worry about loadSourceAccount's buggy pre-8 caching here
++
+         // Note that maxWheatReceive = max(0, availableLimit). But why do we
+         // work with availableLimit?
+         // - If availableLimit >= 0 then maxWheatReceive = availableLimit so
+@@ -162,10 +178,21 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
+         //   is negative.
+         // In practice, I _think_ that negative available limit is not possible
+         // unless there is a logic error.
+-        int64_t availableLimit =
+-            (mWheat.type() == ASSET_TYPE_NATIVE)
+-                ? getMaxAmountReceive(header, sourceAccount)
+-                : wheatLineA.getMaxAmountReceive(header);
++        
++        //int64_t availableLimit =
++        //    (mWheat.type() == ASSET_TYPE_NATIVE)
++        //        ? getMaxAmountReceive(header, sourceAccount)
++        //        : wheatLineA.getMaxAmountReceive(header);
++        
++        int64_t availableLimit = 0;
++        if (mWheat.type() == ASSET_TYPE_NATIVE)
++        {
++            availableLimit = getMaxAmountReceive(header, loadAccount(ltx, getSourceID()));
++        } else {
++            auto wheatLineA = loadTrustLineIfNotNative(ltx, getSourceID(), mWheat);
++            availableLimit = wheatLineA.getMaxAmountReceive(header);
++        }
++
+         if (availableLimit < getOfferBuyingLiabilities())
+         {
+             setResultLineFull();
+@@ -187,10 +214,21 @@ ManageOfferOpFrameBase::computeOfferExchangeParameters(
+         //   balance is negative.
+         // In practice, negative available balance is possible for native assets
+         // after the reserve has been raised.
+-        int64_t availableBalance =
+-            (mSheep.type() == ASSET_TYPE_NATIVE)
+-                ? getAvailableBalance(header, sourceAccount)
+-                : sheepLineA.getAvailableBalance(header);
++        
++        //int64_t availableBalance =
++        //    (mSheep.type() == ASSET_TYPE_NATIVE)
++        //        ? getAvailableBalance(header, sourceAccount)
++        //        : sheepLineA.getAvailableBalance(header);
++        
++        int64_t availableBalance = 0;
++        if (mSheep.type() == ASSET_TYPE_NATIVE)
++        {
++            availableBalance = getAvailableBalance(header, loadAccount(ltx, getSourceID()));
++        } else {
++            auto sheepLineA = loadTrustLineIfNotNative(ltx, getSourceID(), mSheep);
++            availableBalance = sheepLineA.getAvailableBalance(header);
++        }
++
+         if (availableBalance < getOfferSellingLiabilities())
+         {
+             setResultUnderfunded();
+@@ -433,17 +471,25 @@ ManageOfferOpFrameBase::doApply(AbstractLedgerTxn& ltxOuter)
+         {
+             if (sheepStays)
+             {
+-                auto sourceAccount =
+-                    stellar::loadAccountWithoutRecord(ltx, getSourceID());
+-                auto sheepLineA = loadTrustLineWithoutRecordIfNotNative(
+-                    ltx, getSourceID(), mSheep);
+-                auto wheatLineA = loadTrustLineWithoutRecordIfNotNative(
+-                    ltx, getSourceID(), mWheat);
+-
++                //auto sourceAccount =
++                //    stellar::loadAccountWithoutRecord(ltx, getSourceID());
++                auto sourceLoader = [&] () -> ConstLedgerTxnEntry {
++                    return stellar::loadAccountWithoutRecord(ltx, getSourceID());
++                };
++                auto trustLineLoader = [&] (Asset const& asset) {
++                    return stellar::loadTrustLineWithoutRecordIfNotNative(ltx, getSourceID(), asset);
++                };
++                //auto sheepLineA = loadTrustLineWithoutRecordIfNotNative(
++                //    ltx, getSourceID(), mSheep);
++                //auto wheatLineA = loadTrustLineWithoutRecordIfNotNative(
++                //    ltx, getSourceID(), mWheat);
++
++
++                //TODO fix trustlines here
+                 int64_t sheepSendLimit =
+-                    canSellAtMost(header, sourceAccount, mSheep, sheepLineA);
++                    canSellAtMost(header, mSheep, sourceLoader, trustLineLoader);
+                 int64_t wheatReceiveLimit =
+-                    canBuyAtMost(header, sourceAccount, mWheat, wheatLineA);
++                    canBuyAtMost(header, mWheat, sourceLoader, trustLineLoader);
+                 applyOperationSpecificLimits(sheepSendLimit, sheepSent,
+                                              wheatReceiveLimit, wheatReceived);
+                 amount = adjustOffer(mPrice, sheepSendLimit, wheatReceiveLimit);
+diff --git a/src/transactions/OfferExchange.cpp b/src/transactions/OfferExchange.cpp
+index 0cf9981d..bf54ea1c 100644
+--- a/src/transactions/OfferExchange.cpp
++++ b/src/transactions/OfferExchange.cpp
+@@ -77,8 +77,96 @@ canSellAtMost(LedgerTxnHeader const& header, ConstLedgerTxnEntry const& account,
+     }
+ 
+     return 0;
++} 
++
++//nonconst version
++int64_t
++canSellAtMost(LedgerTxnHeader const& header,
++    Asset const& asset, 
++    std::function<LedgerTxnEntry()> sourceLoader, 
++    std::function<TrustLineWrapper(Asset const&)> trustLineLoader)
++{
++    if (asset.type() == ASSET_TYPE_NATIVE)
++    {
++        auto account = sourceLoader();
++        if (!account) {
++            throw std::runtime_error("failed to load account when computing offer exchange params");
++        } 
++        return std::max({stellar::getAvailableBalance(header, account), int64_t(0)});
++    } else {
++        auto trustLine = trustLineLoader(asset);
++        if (trustLine && trustLine.isAuthorizedToMaintainLiabilities())
++        {
++            return std::max({trustLine.getAvailableBalance(header), int64_t(0)});
++        }
++        return 0;
++    }
+ }
+ 
++//nonconst version
++int64_t
++canBuyAtMost(LedgerTxnHeader const& header,
++    Asset const& asset, 
++    std::function<LedgerTxnEntry()> sourceLoader, 
++    std::function<TrustLineWrapper(Asset const&)> trustLineLoader)
++{
++    if (asset.type() == ASSET_TYPE_NATIVE) {
++        auto account = sourceLoader();
++        if (!account) {
++            throw std::runtime_error("failed to load account when computing offer exchange params");
++        }
++        return std::max({getMaxAmountReceive(header, account), int64_t(0)});
++    } else {
++        auto trustLine = trustLineLoader(asset);
++        return trustLine ? std::max({trustLine.getMaxAmountReceive(header), int64_t(0)}) : 0;
++    }
++}
++
++//const version
++int64_t
++canSellAtMost(LedgerTxnHeader const& header,
++    Asset const& asset, 
++    std::function<ConstLedgerTxnEntry()> sourceLoader, 
++    std::function<ConstTrustLineWrapper(Asset const&)> trustLineLoader)
++{
++    if (asset.type() == ASSET_TYPE_NATIVE)
++    {
++        auto account = sourceLoader();
++        if (!account) {
++            throw std::runtime_error("failed to load account when computing offer exchange params");
++        } 
++        return std::max({stellar::getAvailableBalance(header, account), int64_t(0)});
++    } else {
++        auto trustLine = trustLineLoader(asset);
++        if (trustLine && trustLine.isAuthorizedToMaintainLiabilities())
++        {
++            return std::max({trustLine.getAvailableBalance(header), int64_t(0)});
++        }
++        return 0;
++    }
++}
++
++
++// const versions
++int64_t
++canBuyAtMost(LedgerTxnHeader const& header,
++    Asset const& asset, 
++    std::function<ConstLedgerTxnEntry()> sourceLoader, 
++    std::function<ConstTrustLineWrapper(Asset const&)> trustLineLoader)
++{
++    if (asset.type() == ASSET_TYPE_NATIVE) {
++        auto account = sourceLoader();
++        if (!account) {
++            throw std::runtime_error("failed to load account when computing offer exchange params");
++        }
++        return std::max({getMaxAmountReceive(header, account), int64_t(0)});
++    } else {
++        auto trustLine = trustLineLoader(asset);
++        return trustLine ? std::max({trustLine.getMaxAmountReceive(header), int64_t(0)}) : 0;
++    }
++}
++
++
+ int64_t
+ canBuyAtMost(LedgerTxnHeader const& header, LedgerTxnEntry const& account,
+              Asset const& asset, TrustLineWrapper const& trustLine)
+@@ -769,15 +857,14 @@ applyPriceErrorThresholds(Price price, int64_t wheatReceive, int64_t sheepSend,
+ }
+ 
+ void
+-adjustOffer(LedgerTxnHeader const& header, LedgerTxnEntry& offer,
+-            LedgerTxnEntry const& account, Asset const& wheat,
+-            TrustLineWrapper const& wheatLine, Asset const& sheep,
+-            TrustLineWrapper const& sheepLine)
++adjustOffer(LedgerTxnHeader const& header, LedgerTxnEntry& offer, Asset const& wheat, Asset const& sheep,
++    std::function<LedgerTxnEntry()> sourceLoader,
++    std::function<TrustLineWrapper(Asset const&)> trustLineLoader)
+ {
+     OfferEntry& oe = offer.current().data.offer();
+     int64_t maxWheatSend =
+-        std::min({oe.amount, canSellAtMost(header, account, wheat, wheatLine)});
+-    int64_t maxSheepReceive = canBuyAtMost(header, account, sheep, sheepLine);
++        std::min({oe.amount, canSellAtMost(header, wheat, sourceLoader, trustLineLoader)});
++    int64_t maxSheepReceive = canBuyAtMost(header, sheep, sourceLoader, trustLineLoader);
+     oe.amount = adjustOffer(oe.price, maxWheatSend, maxSheepReceive);
+ }
+ 
+@@ -1115,24 +1202,35 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
+ 
+     // Load necessary accounts and trustlines. Note that any LedgerEntry loaded
+     // here was also loaded during releaseLiabilities.
+-    LedgerTxnEntry accountB;
+-    if (wheat.type() == ASSET_TYPE_NATIVE || sheep.type() == ASSET_TYPE_NATIVE)
+-    {
+-        accountB = stellar::loadAccount(ltx, accountBID);
+-    }
+-    auto sheepLineAccountB = loadTrustLineIfNotNative(ltx, accountBID, sheep);
+-    auto wheatLineAccountB = loadTrustLineIfNotNative(ltx, accountBID, wheat);
++    auto accountBLoader = [&] () {
++        LedgerTxnEntry accountB;
++        if (wheat.type() == ASSET_TYPE_NATIVE || sheep.type() == ASSET_TYPE_NATIVE)
++        {
++            accountB = stellar::loadAccount(ltx, accountBID);
++        }
++        return accountB;
++    };
++
++    auto trustLineLoader = [&] (Asset const& asset) {
++        return loadTrustLineIfNotNative(ltx, accountBID, asset);
++    };
++
++    //auto sheepLineAccountB = loadTrustLineIfNotNative(ltx, accountBID, sheep);
++    //auto wheatLineAccountB = loadTrustLineIfNotNative(ltx, accountBID, wheat);
+ 
+     // As of the protocol version 10, this call to adjustOffer should have no
+     // effect. We leave it here only as a preventative measure.
+-    adjustOffer(header, sellingWheatOffer, accountB, wheat, wheatLineAccountB,
+-                sheep, sheepLineAccountB);
++    adjustOffer(header, sellingWheatOffer, wheat, sheep, accountBLoader, trustLineLoader);
+ 
+-    int64_t maxWheatSend =
+-        canSellAtMost(header, accountB, wheat, wheatLineAccountB);
++    //int64_t maxWheatSend =
++    //    canSellAtMost(header, accountB, wheat, wheatLineAccountB);
++    int64_t maxWheatSend = 
++        canSellAtMost(header, wheat, accountBLoader, trustLineLoader);
+     maxWheatSend = std::min({offer.amount, maxWheatSend});
+-    int64_t maxSheepReceive =
+-        canBuyAtMost(header, accountB, sheep, sheepLineAccountB);
++    //int64_t maxSheepReceive =
++    //    canBuyAtMost(header, accountB, sheep, sheepLineAccountB);
++    int64_t maxSheepReceive = 
++        canBuyAtMost(header, sheep, accountBLoader, trustLineLoader);
+     auto exchangeResult =
+         exchangeV10(offer.price, maxWheatSend, maxWheatReceived, maxSheepSend,
+                     maxSheepReceive, round);
+@@ -1146,6 +1244,7 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
+     {
+         if (sheep.type() == ASSET_TYPE_NATIVE)
+         {
++            auto accountB = accountBLoader();
+             if (!addBalance(header, accountB, numSheepSend))
+             {
+                 throw std::runtime_error("overflowed sheep balance");
+@@ -1153,6 +1252,7 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
+         }
+         else
+         {
++            auto sheepLineAccountB = trustLineLoader(sheep);
+             if (!sheepLineAccountB.addBalance(header, numSheepSend))
+             {
+                 throw std::runtime_error("overflowed sheep balance");
+@@ -1164,6 +1264,7 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
+     {
+         if (wheat.type() == ASSET_TYPE_NATIVE)
+         {
++            auto accountB = accountBLoader();
+             if (!addBalance(header, accountB, -numWheatReceived))
+             {
+                 throw std::runtime_error("overflowed wheat balance");
+@@ -1171,6 +1272,7 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
+         }
+         else
+         {
++            auto wheatLineAccountB = trustLineLoader(wheat);
+             if (!wheatLineAccountB.addBalance(header, -numWheatReceived))
+             {
+                 throw std::runtime_error("overflowed wheat balance");
+@@ -1181,8 +1283,7 @@ crossOfferV10(AbstractLedgerTxn& ltx, LedgerTxnEntry& sellingWheatOffer,
+     if (wheatStays)
+     {
+         offer.amount -= numWheatReceived;
+-        adjustOffer(header, sellingWheatOffer, accountB, wheat,
+-                    wheatLineAccountB, sheep, sheepLineAccountB);
++        adjustOffer(header, sellingWheatOffer, wheat, sheep, accountBLoader, trustLineLoader);
+     }
+     else
+     {
+diff --git a/src/transactions/OfferExchange.h b/src/transactions/OfferExchange.h
+index ea58a2fa..18d54ac4 100644
+--- a/src/transactions/OfferExchange.h
++++ b/src/transactions/OfferExchange.h
+@@ -248,19 +248,52 @@ int64_t canSellAtMostBasedOnSheep(LedgerTxnHeader const& header,
+                                   ConstTrustLineWrapper const& sheepLine,
+                                   Price const& wheatPrice);
+ 
++/*
+ int64_t canSellAtMost(LedgerTxnHeader const& header,
+                       LedgerTxnEntry const& account, Asset const& asset,
+                       TrustLineWrapper const& trustLine);
+ int64_t canSellAtMost(LedgerTxnHeader const& header,
+                       ConstLedgerTxnEntry const& account, Asset const& asset,
+                       ConstTrustLineWrapper const& trustLine);
++*/
+ 
++int64_t
++canSellAtMost(
++    LedgerTxnHeader const& header,
++    Asset const& asset,
++    std::function<LedgerTxnEntry()> sourceLoader,
++    std::function<TrustLineWrapper(Asset const&)> trustLineLoader);
++
++int64_t
++canBuyAtMost(
++    LedgerTxnHeader const& header,
++    Asset const& asset, 
++    std::function<LedgerTxnEntry()> sourceLoader,
++    std::function<TrustLineWrapper(Asset const&)> trustLineLoader);
++
++
++int64_t
++canSellAtMost(
++    LedgerTxnHeader const& header,
++    Asset const& asset,
++    std::function<ConstLedgerTxnEntry()> sourceLoader,
++    std::function<ConstTrustLineWrapper(Asset const&)> trustLineLoader);
++
++int64_t
++canBuyAtMost(
++    LedgerTxnHeader const& header,
++    Asset const& asset, 
++    std::function<ConstLedgerTxnEntry()> sourceLoader,
++    std::function<ConstTrustLineWrapper(Asset const&)> trustLineLoader);
++
++/*
+ int64_t canBuyAtMost(LedgerTxnHeader const& header,
+                      LedgerTxnEntry const& account, Asset const& asset,
+                      TrustLineWrapper const& trustLine);
+ int64_t canBuyAtMost(LedgerTxnHeader const& header,
+                      ConstLedgerTxnEntry const& account, Asset const& asset,
+                      ConstTrustLineWrapper const& trustLine);
++*/
+ 
+ ExchangeResult exchangeV2(int64_t wheatReceived, Price price,
+                           int64_t maxWheatReceive, int64_t maxSheepSend);
+
+diff --git a/src/transactions/OperationFrame.cpp b/src/transactions/OperationFrame.cpp
+index 31da316f..965e1400 100644
+--- a/src/transactions/OperationFrame.cpp
++++ b/src/transactions/OperationFrame.cpp
+@@ -13,9 +13,11 @@
+ #include "transactions/CreateAccountOpFrame.h"
+ #include "transactions/CreateClaimableBalanceOpFrame.h"
+ #include "transactions/CreatePassiveSellOfferOpFrame.h"
++#include "transactions/CreateSpeedexIOCOfferOpFrame.h"
+ #include "transactions/EndSponsoringFutureReservesOpFrame.h"
+ #include "transactions/InflationOpFrame.h"
+ #include "transactions/LiquidityPoolDepositOpFrame.h"
++#include "transactions/LiquidityPoolWithdrawOpFrame.h"
+ #include "transactions/ManageBuyOfferOpFrame.h"
+ #include "transactions/ManageDataOpFrame.h"
+ #include "transactions/ManageSellOfferOpFrame.h"
+@@ -107,8 +109,12 @@ OperationFrame::makeHelper(Operation const& op, OperationResult& res,
+         return std::make_shared<ClawbackClaimableBalanceOpFrame>(op, res, tx);
+     case SET_TRUST_LINE_FLAGS:
+         return std::make_shared<SetTrustLineFlagsOpFrame>(op, res, tx);
++    case CREATE_SPEEDEX_IOC_OFFER:
++        return std::make_shared<CreateSpeedexIOCOfferOpFrame>(op, res, tx, index);
+     case LIQUIDITY_POOL_DEPOSIT:
+         return std::make_shared<LiquidityPoolDepositOpFrame>(op, res, tx);
++    case LIQUIDITY_POOL_WITHDRAW:
++        return std::make_shared<LiquidityPoolWithdrawOpFrame>(op, res, tx);
+     default:
+         ostringstream err;
+         err << "Unknown Tx type: " << op.body.type();
+@@ -140,6 +146,21 @@ OperationFrame::apply(SignatureChecker& signatureChecker,
+     return res;
+ }
+ 
++bool
++OperationFrame::doAddCommutativityRequirements(AbstractLedgerTxn& ltx,
++                                               TransactionCommutativityRequirements& reqs)
++{
++    return false;
++}
++
++bool
++OperationFrame::addCommutativityRequirements(AbstractLedgerTxn& ltx,
++                                             TransactionCommutativityRequirements& reqs) {
++    ZoneScoped;
++    //TODO logging
++    return doAddCommutativityRequirements(ltx, reqs);
++}
++
+ ThresholdLevel
+ OperationFrame::getThresholdLevel() const
+ {
+diff --git a/src/transactions/OperationFrame.h b/src/transactions/OperationFrame.h
+index a8162d8d..bf295678 100644
+--- a/src/transactions/OperationFrame.h
++++ b/src/transactions/OperationFrame.h
+@@ -17,6 +17,9 @@ class MetricsRegistry;
+ 
+ namespace stellar
+ {
++
++class TransactionCommutativityRequirements;
++
+ class AbstractLedgerTxn;
+ class LedgerManager;
+ class LedgerTxnEntry;
+@@ -42,6 +45,8 @@ class OperationFrame
+     virtual bool doCheckValid(uint32_t ledgerVersion) = 0;
+     virtual bool doApply(AbstractLedgerTxn& ltx) = 0;
+ 
++    virtual bool doAddCommutativityRequirements(AbstractLedgerTxn& ltx, TransactionCommutativityRequirements& reqs);
++
+     // returns the threshold this operation requires
+     virtual ThresholdLevel getThresholdLevel() const;
+ 
+@@ -82,6 +87,8 @@ class OperationFrame
+ 
+     bool apply(SignatureChecker& signatureChecker, AbstractLedgerTxn& ltx);
+ 
++    bool addCommutativityRequirements(AbstractLedgerTxn& ltx, TransactionCommutativityRequirements& reqs);
++
+     Operation const&
+     getOperation() const
+     {
+diff --git a/src/transactions/PathPaymentOpFrameBase.cpp b/src/transactions/PathPaymentOpFrameBase.cpp
+index 8e93eb0e..123351f8 100644
+--- a/src/transactions/PathPaymentOpFrameBase.cpp
++++ b/src/transactions/PathPaymentOpFrameBase.cpp
+@@ -122,6 +122,9 @@ PathPaymentOpFrameBase::shouldBypassIssuerCheck(
+     // and the destination is the issuer we don't bother
+     // checking if the destination account even exist
+     // so that it's always possible to send credits back to its issuer
++    // Is this only invoked when PaymentOp is emulated via PathPaymentStrictSendOp???
++    // asset is not XLM && no intermediate assets && start asset == end asset && issuer of asset is dest account (so no trustline limit?)
++    // why
+     return (getDestAsset().type() != ASSET_TYPE_NATIVE) && (path.size() == 0) &&
+            (getSourceAsset() == getDestAsset()) &&
+            (getIssuer(getDestAsset()) == getDestID());
+diff --git a/src/transactions/PaymentOpFrame.cpp b/src/transactions/PaymentOpFrame.cpp
+index fb7a1bc6..2381155c 100644
+--- a/src/transactions/PaymentOpFrame.cpp
++++ b/src/transactions/PaymentOpFrame.cpp
+@@ -132,6 +132,31 @@ PaymentOpFrame::doCheckValid(uint32_t ledgerVersion)
+     return true;
+ }
+ 
++bool
++PaymentOpFrame::doAddCommutativityRequirements(AbstractLedgerTxn& ltx,
++                                               TransactionCommutativityRequirements& reqs)
++{
++    if (!reqs.checkTrustLine(ltx, toAccountID(mPayment.destination), mPayment.asset))
++    {
++        innerResult().code(PAYMENT_MALFORMED); //TODO proper error code
++        return false;
++    }
++
++    if (!reqs.checkTrustLine(ltx, getSourceID(), mPayment.asset)) {
++        innerResult().code(PAYMENT_MALFORMED);
++        return false;
++    }
++
++    if (!stellar::isCommutativeTxEnabledAsset(ltx, mPayment.asset)) {
++        innerResult().code(PAYMENT_MALFORMED);
++        return false;
++    }
++
++    reqs.addAssetRequirement(getSourceID(), mPayment.asset, mPayment.amount);
++
++    return true;
++}
++
+ void
+ PaymentOpFrame::insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const
+ {
+diff --git a/src/transactions/PaymentOpFrame.h b/src/transactions/PaymentOpFrame.h
+index cb4d25aa..5c1165fa 100644
+--- a/src/transactions/PaymentOpFrame.h
++++ b/src/transactions/PaymentOpFrame.h
+@@ -9,6 +9,7 @@
+ namespace stellar
+ {
+ class AbstractLedgerTxn;
++class TransactionCommutativityRequirements;
+ 
+ class PaymentOpFrame : public OperationFrame
+ {
+@@ -25,6 +26,9 @@ class PaymentOpFrame : public OperationFrame
+ 
+     bool doApply(AbstractLedgerTxn& ltx) override;
+     bool doCheckValid(uint32_t ledgerVersion) override;
++
++    bool doAddCommutativityRequirements(AbstractLedgerTxn& ltx, TransactionCommutativityRequirements& reqs) override;
++    
+     void
+     insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const override;
+ 
+
+diff --git a/src/transactions/SetOptionsOpFrame.cpp b/src/transactions/SetOptionsOpFrame.cpp
+index d9794279..329cee6e 100644
+--- a/src/transactions/SetOptionsOpFrame.cpp
++++ b/src/transactions/SetOptionsOpFrame.cpp
+@@ -19,7 +19,7 @@ namespace stellar
+ 
+ static const uint32 allAccountAuthFlags =
+     (AUTH_REQUIRED_FLAG | AUTH_REVOCABLE_FLAG | AUTH_IMMUTABLE_FLAG |
+-     AUTH_CLAWBACK_ENABLED_FLAG);
++     AUTH_CLAWBACK_ENABLED_FLAG | AUTH_ISSUANCE_LIMIT);
+ 
+ SetOptionsOpFrame::SetOptionsOpFrame(Operation const& op, OperationResult& res,
+                                      TransactionFrame& parentTx)
+@@ -124,6 +124,11 @@ SetOptionsOpFrame::doApply(AbstractLedgerTxn& ltx)
+ {
+     ZoneNamedN(applyZone, "SetOptionsOp apply", true);
+ 
++    // Obviously insufficient to not check anything at all when enabling issuance limit.
++    // Probably ideal way is to have it on by default when creating new account,
++    // and make that the only way of turning it on?  Of course, this is irrelevant
++    // if we do (the right thing) the asset issuer trustlines.
++
+     auto header = ltx.loadHeader();
+     auto sourceAccount = loadSourceAccount(ltx, header);
+     auto& account = sourceAccount.current().data.account();
+diff --git a/src/transactions/TransactionBridge.cpp b/src/transactions/TransactionBridge.cpp
+index b3bba6b9..59cb5ff9 100644
+--- a/src/transactions/TransactionBridge.cpp
++++ b/src/transactions/TransactionBridge.cpp
+@@ -5,6 +5,7 @@
+ #include "transactions/TransactionBridge.h"
+ #include "transactions/TransactionFrame.h"
+ #include "util/GlobalChecks.h"
++#include "xdr/Stellar-transaction.h"
+ 
+ namespace stellar
+ {
+@@ -48,6 +49,8 @@ getSignatures(TransactionEnvelope& env)
+         return env.v1().signatures;
+     case ENVELOPE_TYPE_TX_FEE_BUMP:
+         return env.feeBump().signatures;
++    case ENVELOPE_TYPE_TX_COMMUTATIVE:
++        return env.commutativeTx().signatures;
+     default:
+         abort();
+     }
+@@ -63,7 +66,15 @@ getSignaturesInner(TransactionEnvelope& env)
+     case ENVELOPE_TYPE_TX:
+         return env.v1().signatures;
+     case ENVELOPE_TYPE_TX_FEE_BUMP:
+-        return env.feeBump().tx.innerTx.v1().signatures;
++        switch(env.feeBump().tx.innerTx.type())
++        {
++        case ENVELOPE_TYPE_TX:
++            return env.feeBump().tx.innerTx.v1().signatures;
++        default:
++            abort();
++        }
++    case ENVELOPE_TYPE_TX_COMMUTATIVE:
++        return env.commutativeTx().signatures;
+     default:
+         abort();
+     }
+@@ -79,8 +90,15 @@ getOperations(TransactionEnvelope& env)
+     case ENVELOPE_TYPE_TX:
+         return env.v1().tx.operations;
+     case ENVELOPE_TYPE_TX_FEE_BUMP:
+-        releaseAssert(env.feeBump().tx.innerTx.type() == ENVELOPE_TYPE_TX);
+-        return env.feeBump().tx.innerTx.v1().tx.operations;
++        switch(env.feeBump().tx.innerTx.type())
++        {
++        case ENVELOPE_TYPE_TX:
++            return env.feeBump().tx.innerTx.v1().tx.operations;
++        default:
++            abort();
++        }
++    case ENVELOPE_TYPE_TX_COMMUTATIVE:
++        return env.commutativeTx().tx.operations;
+     default:
+         abort();
+     }
+@@ -93,30 +111,84 @@ getSignatures(TransactionFramePtr tx)
+     return getSignatures(tx->getEnvelope());
+ }
+ 
++struct SeqNumAccessor {
++    using ReturnT = int64_t;
++
++    template<typename TxType>
++    static ReturnT& get(TxType& tx) {
++        return tx.seqNum;
++    }
++};
++
++struct MemoAccessor {
++    using ReturnT = Memo;
++
++    template<typename TxType>
++    static ReturnT& get(TxType& tx) {
++        return tx.memo;
++    }
++};
++
++struct FeeAccessor {
++    using ReturnT = uint32_t;
++
++    template<typename TxType>
++    static ReturnT& get(TxType& tx) {
++        return tx.fee;
++    }
++};
++
++struct TimeBoundsAccessor {
++    using ReturnT = xdr::pointer<TimeBounds>;
++
++    template<typename TxType>
++    static ReturnT& get(TxType& tx) {
++        return tx.timeBounds;
++    }
++};
++
++template<typename AccessorT>
++typename AccessorT::ReturnT& genericEnvelopeAccess(TransactionEnvelope& env)
++{
++    switch(env.type())
++    {
++    case ENVELOPE_TYPE_TX_V0:
++        return AccessorT::template get<TransactionV0>(env.v0().tx);
++    case ENVELOPE_TYPE_TX:
++        return AccessorT::template get<Transaction>(env.v1().tx);
++    case ENVELOPE_TYPE_TX_COMMUTATIVE:
++        return AccessorT::template get<CommutativeTransaction>(env.commutativeTx().tx);
++    default:
++        abort();
++    }
++}
++
+ void
+ setSeqNum(TransactionFramePtr tx, int64_t seq)
+ {
+     auto& env = tx->getEnvelope();
+-    int64_t& s = env.type() == ENVELOPE_TYPE_TX_V0 ? env.v0().tx.seqNum
+-                                                   : env.v1().tx.seqNum;
+-    s = seq;
++    genericEnvelopeAccess<SeqNumAccessor>(env) = seq;
+ }
+ 
+ void
+ setFee(TransactionFramePtr tx, uint32_t fee)
+ {
+     auto& env = tx->getEnvelope();
+-    uint32_t& f =
+-        env.type() == ENVELOPE_TYPE_TX_V0 ? env.v0().tx.fee : env.v1().tx.fee;
+-    f = fee;
++    genericEnvelopeAccess<FeeAccessor>(env) = fee;
++}
++
++void
++setMemo(TransactionFramePtr tx, Memo memo)
++{
++    auto& env = tx->getEnvelope();
++    genericEnvelopeAccess<MemoAccessor>(env) = memo;
+ }
+ 
+ void
+ setMinTime(TransactionFramePtr tx, TimePoint minTime)
+ {
+     auto& env = tx->getEnvelope();
+-    auto& tb = env.type() == ENVELOPE_TYPE_TX_V0 ? env.v0().tx.timeBounds
+-                                                 : env.v1().tx.timeBounds;
++    auto& tb = genericEnvelopeAccess<TimeBoundsAccessor>(env);
+     tb.activate().minTime = minTime;
+ }
+ 
+@@ -124,8 +196,7 @@ void
+ setMaxTime(TransactionFramePtr tx, TimePoint maxTime)
+ {
+     auto& env = tx->getEnvelope();
+-    auto& tb = env.type() == ENVELOPE_TYPE_TX_V0 ? env.v0().tx.timeBounds
+-                                                 : env.v1().tx.timeBounds;
++    auto& tb = genericEnvelopeAccess<TimeBoundsAccessor>(env);
+     tb.activate().maxTime = maxTime;
+ }
+ #endif
+diff --git a/src/transactions/TransactionBridge.h b/src/transactions/TransactionBridge.h
+index 98b9ba5f..003f3a47 100644
+--- a/src/transactions/TransactionBridge.h
++++ b/src/transactions/TransactionBridge.h
+@@ -30,6 +30,8 @@ void setSeqNum(TransactionFramePtr tx, int64_t seq);
+ 
+ void setFee(TransactionFramePtr tx, uint32_t fee);
+ 
++void setMemo(TransactionFramePtr tx, Memo memo);
++
+ void setMinTime(TransactionFramePtr tx, TimePoint minTime);
+ 
+ void setMaxTime(TransactionFramePtr tx, TimePoint maxTime);
+diff --git a/src/transactions/TransactionFrame.cpp b/src/transactions/TransactionFrame.cpp
+index 0335ff4e..ea3ef0f5 100644
+--- a/src/transactions/TransactionFrame.cpp
++++ b/src/transactions/TransactionFrame.cpp
+@@ -79,10 +79,15 @@ TransactionFrame::getContentsHash() const
+             mContentsHash = sha256(xdr::xdr_to_opaque(
+                 mNetworkID, ENVELOPE_TYPE_TX, 0, mEnvelope.v0().tx));
+         }
+-        else
++        else if (mEnvelope.type() == ENVELOPE_TYPE_TX)
+         {
+             mContentsHash = sha256(xdr::xdr_to_opaque(
+                 mNetworkID, ENVELOPE_TYPE_TX, mEnvelope.v1().tx));
++        } 
++        else
++        {
++            mContentsHash = sha256(xdr::xdr_to_opaque(
++                mNetworkID, ENVELOPE_TYPE_TX_COMMUTATIVE, mEnvelope.commutativeTx().tx));
+         }
+     }
+ #ifdef _DEBUG
+@@ -114,8 +119,16 @@ TransactionFrame::getEnvelope()
+ SequenceNumber
+ TransactionFrame::getSeqNum() const
+ {
+-    return mEnvelope.type() == ENVELOPE_TYPE_TX_V0 ? mEnvelope.v0().tx.seqNum
+-                                                   : mEnvelope.v1().tx.seqNum;
++    switch(mEnvelope.type()) {
++        case ENVELOPE_TYPE_TX_V0:
++            return mEnvelope.v0().tx.seqNum;
++        case ENVELOPE_TYPE_TX:
++            return mEnvelope.v1().tx.seqNum;
++        case ENVELOPE_TYPE_TX_COMMUTATIVE:
++            return mEnvelope.commutativeTx().tx.seqNum;
++        default:
++            abort();
++    }
+ }
+ 
+ AccountID
+@@ -127,28 +140,97 @@ TransactionFrame::getFeeSourceID() const
+ AccountID
+ TransactionFrame::getSourceID() const
+ {
+-    if (mEnvelope.type() == ENVELOPE_TYPE_TX_V0)
+-    {
+-        AccountID res;
+-        res.ed25519() = mEnvelope.v0().tx.sourceAccountEd25519;
+-        return res;
++
++    switch(mEnvelope.type()) {
++        case ENVELOPE_TYPE_TX_V0:
++        {
++            AccountID res;
++            res.ed25519() = mEnvelope.v0().tx.sourceAccountEd25519;
++            return res;
++        }
++        case ENVELOPE_TYPE_TX:
++            return toAccountID(mEnvelope.v1().tx.sourceAccount);
++        case ENVELOPE_TYPE_TX_COMMUTATIVE:
++            return toAccountID(mEnvelope.commutativeTx().tx.sourceAccount);
++        default:
++            abort();
+     }
+-    return toAccountID(mEnvelope.v1().tx.sourceAccount);
+ }
+ 
+ uint32_t
+ TransactionFrame::getNumOperations() const
+ {
+-    return mEnvelope.type() == ENVELOPE_TYPE_TX_V0
+-               ? static_cast<uint32_t>(mEnvelope.v0().tx.operations.size())
+-               : static_cast<uint32_t>(mEnvelope.v1().tx.operations.size());
++    switch(mEnvelope.type()) {
++        case ENVELOPE_TYPE_TX_V0:
++            return static_cast<uint32_t>(mEnvelope.v0().tx.operations.size());
++        case ENVELOPE_TYPE_TX:
++            return static_cast<uint32_t>(mEnvelope.v1().tx.operations.size());
++        case ENVELOPE_TYPE_TX_COMMUTATIVE:
++            return static_cast<uint32_t>(mEnvelope.commutativeTx().tx.operations.size());
++        default:
++            abort();
++    }
+ }
+ 
+ int64_t
+ TransactionFrame::getFeeBid() const
+ {
+-    return mEnvelope.type() == ENVELOPE_TYPE_TX_V0 ? mEnvelope.v0().tx.fee
+-                                                   : mEnvelope.v1().tx.fee;
++    switch(mEnvelope.type()) {
++        case ENVELOPE_TYPE_TX_V0:
++            return mEnvelope.v0().tx.fee;
++        case ENVELOPE_TYPE_TX:
++            return mEnvelope.v1().tx.fee;
++        case ENVELOPE_TYPE_TX_COMMUTATIVE:
++            return mEnvelope.commutativeTx().tx.fee;
++        default:
++            abort();
++    }
++}
++
++void 
++TransactionFrame::addFeeCommutativityRequirement(TransactionCommutativityRequirements& reqs) const
++{
++    auto nativeAsset = getNativeAsset();
++    reqs.addAssetRequirement(getFeeSourceID(), nativeAsset, getFeeBid());
++}
++
++std::optional<TransactionCommutativityRequirements>
++TransactionFrame::getCommutativityRequirementsNoFees(AbstractLedgerTxn& ltx) const
++{
++    TransactionCommutativityRequirements reqs;
++
++    if (isCommutativeTransaction())
++    {
++        for (const auto& op : getOperations()) {
++            if (!op->addCommutativityRequirements(ltx, reqs)) {
++                return std::nullopt;
++            }
++        }
++    }
++    return reqs;
++}
++
++std::optional<TransactionCommutativityRequirements>
++TransactionFrame::getCommutativityRequirements(AbstractLedgerTxn& ltx) const
++{
++    auto reqs = getCommutativityRequirementsNoFees(ltx);
++    if (!reqs) {
++        return std::nullopt;
++    }
++    addFeeCommutativityRequirement(*reqs);
++
++    return reqs;
++}
++
++UnorderedSet<AccountID>
++TransactionFrame::getRelevantAccounts() const 
++{
++    auto relevantAccounts = UnorderedSet<AccountID>({getFeeSourceID()});
++    for (auto const& op : getOperations()) {
++        relevantAccounts.insert(op->getSourceID());
++    }
++
++    return relevantAccounts;
+ }
+ 
+ int64_t
+@@ -284,13 +366,57 @@ TransactionFrame::makeOperation(Operation const& op, OperationResult& res,
+                                       static_cast<uint32_t>(index));
+ }
+ 
++xdr::xvector<Operation, MAX_OPS_PER_TX> const&
++TransactionFrame::getXDROperations() const {
++    switch(mEnvelope.type()) {
++        case ENVELOPE_TYPE_TX_V0:
++            return mEnvelope.v0().tx.operations;
++        case ENVELOPE_TYPE_TX:
++            return mEnvelope.v1().tx.operations;
++        case ENVELOPE_TYPE_TX_COMMUTATIVE:
++            return mEnvelope.commutativeTx().tx.operations;
++        default:
++            abort();
++    }
++}
++
++bool isCommutativeOp(OperationType opType) {
++    switch(opType) {
++        case PAYMENT:
++            return true;
++        default:
++            return false;
++    }
++}
++
++bool
++TransactionFrame::commutativityWellFormednessChecks() const {
++    if (isCommutativeTransaction()) {
++        return isWellFormedCommutativeEnvelope();
++    }
++    return true;
++}
++
++bool
++TransactionFrame::isWellFormedCommutativeEnvelope() const {
++    if (mEnvelope.type() != ENVELOPE_TYPE_TX_COMMUTATIVE) {
++        return false;
++    }
++    auto& ops = getXDROperations();
++
++    for (auto& op : ops) {
++        if (!isCommutativeOp(op.body.type())) {
++            return false;
++        }
++    }
++    return true;
++}
++
+ void
+ TransactionFrame::resetResults(LedgerHeader const& header, int64_t baseFee,
+                                bool applying)
+ {
+-    auto& ops = mEnvelope.type() == ENVELOPE_TYPE_TX_V0
+-                    ? mEnvelope.v0().tx.operations
+-                    : mEnvelope.v1().tx.operations;
++    auto& ops = getXDROperations();
+ 
+     // pre-allocates the results for all operations
+     getResult().result.code(txSUCCESS);
+@@ -310,13 +436,27 @@ TransactionFrame::resetResults(LedgerHeader const& header, int64_t baseFee,
+     getResult().feeCharged = getFee(header, baseFee, applying);
+ }
+ 
++xdr::pointer<TimeBounds> const&
++TransactionFrame::getTimeBounds() const
++{
++    switch(mEnvelope.type()) {
++        case ENVELOPE_TYPE_TX_V0:
++            return mEnvelope.v0().tx.timeBounds;
++        case ENVELOPE_TYPE_TX:
++            return mEnvelope.v1().tx.timeBounds;
++        case ENVELOPE_TYPE_TX_COMMUTATIVE:
++            return mEnvelope.commutativeTx().tx.timeBounds;
++        default:
++            abort();
++    }
++}
++
+ bool
+ TransactionFrame::isTooEarly(LedgerTxnHeader const& header,
+                              uint64_t lowerBoundCloseTimeOffset) const
+ {
+-    auto const& tb = mEnvelope.type() == ENVELOPE_TYPE_TX_V0
+-                         ? mEnvelope.v0().tx.timeBounds
+-                         : mEnvelope.v1().tx.timeBounds;
++    auto const& tb = getTimeBounds();
++
+     if (tb)
+     {
+         uint64 closeTime = header.current().scpValue.closeTime;
+@@ -330,9 +470,7 @@ bool
+ TransactionFrame::isTooLate(LedgerTxnHeader const& header,
+                             uint64_t upperBoundCloseTimeOffset) const
+ {
+-    auto const& tb = mEnvelope.type() == ENVELOPE_TYPE_TX_V0
+-                         ? mEnvelope.v0().tx.timeBounds
+-                         : mEnvelope.v1().tx.timeBounds;
++    auto const& tb = getTimeBounds();
+     if (tb)
+     {
+         // Prior to consensus, we can pass in an upper bound estimate on when we
+@@ -397,6 +535,11 @@ TransactionFrame::commonValidPreSeqNum(AbstractLedgerTxn& ltx, bool chargeFee,
+         return false;
+     }
+ 
++    if (!commutativityWellFormednessChecks()) {
++        getResult().result.code(txBAD_COMMUTATIVITY_CONTEXT);
++        return false;
++    }
++
+     return true;
+ }
+ 
+
+@@ -690,6 +835,11 @@ TransactionFrame::checkValid(AbstractLedgerTxn& ltxOuter,
+                       upperBoundCloseTimeOffset);
+ }
+ 
++bool
++TransactionFrame::isCommutativeTransaction() const {
++    return mEnvelope.type() == ENVELOPE_TYPE_TX_COMMUTATIVE;
++}
++
+ void
+ TransactionFrame::insertKeysForFeeProcessing(
+     UnorderedSet<LedgerKey>& keys) const
+diff --git a/src/transactions/TransactionFrame.h b/src/transactions/TransactionFrame.h
+index c5c43667..bb49c768 100644
+--- a/src/transactions/TransactionFrame.h
++++ b/src/transactions/TransactionFrame.h
+
+@@ -66,6 +70,10 @@ class TransactionFrame : public TransactionFrameBase
+         kMaybeValid
+     };
+ 
++    xdr::pointer<TimeBounds> const& getTimeBounds() const;
++
++    xdr::xvector<Operation, MAX_OPS_PER_TX> const & getXDROperations() const;
++
+     virtual bool isTooEarly(LedgerTxnHeader const& header,
+                             uint64_t lowerBoundCloseTimeOffset) const;
+     virtual bool isTooLate(LedgerTxnHeader const& header,
+@@ -104,6 +112,9 @@ class TransactionFrame : public TransactionFrameBase
+                            SignatureChecker& signatureChecker,
+                            AbstractLedgerTxn& ltxOuter);
+ 
++
++    bool isWellFormedCommutativeEnvelope() const;
++
+   public:
+     TransactionFrame(Hash const& networkID,
+                      TransactionEnvelope const& envelope);
+@@ -161,6 +172,23 @@ class TransactionFrame : public TransactionFrameBase
+ 
+     int64_t getFeeBid() const override;
+ 
++
++    bool isCommutativeTransaction() const override;
++    bool commutativityWellFormednessChecks() const override;
++
++
++    void
++    addFeeCommutativityRequirement(TransactionCommutativityRequirements& reqs) const;
++
++    std::optional<TransactionCommutativityRequirements>
++    getCommutativityRequirements(AbstractLedgerTxn& ltx) const override;
++
++    std::optional<TransactionCommutativityRequirements>
++    getCommutativityRequirementsNoFees(AbstractLedgerTxn& ltx) const override;
++
++    UnorderedSet<AccountID>
++    getRelevantAccounts() const override; 
++
+     int64_t getMinFee(LedgerHeader const& header) const override;
+ 
+     virtual int64_t getFee(LedgerHeader const& header, int64_t baseFee,
+diff --git a/src/transactions/TransactionFrameBase.cpp b/src/transactions/TransactionFrameBase.cpp
+index a1cc4dcc..bcf5b41f 100644
+--- a/src/transactions/TransactionFrameBase.cpp
++++ b/src/transactions/TransactionFrameBase.cpp
+@@ -17,6 +17,7 @@ TransactionFrameBase::makeTransactionFromWire(Hash const& networkID,
+     {
+     case ENVELOPE_TYPE_TX_V0:
+     case ENVELOPE_TYPE_TX:
++    case ENVELOPE_TYPE_TX_COMMUTATIVE:
+         return std::make_shared<TransactionFrame>(networkID, env);
+     case ENVELOPE_TYPE_TX_FEE_BUMP:
+         return std::make_shared<FeeBumpTransactionFrame>(networkID, env);
+@@ -24,4 +25,5 @@ TransactionFrameBase::makeTransactionFromWire(Hash const& networkID,
+         abort();
+     }
+ }
++
+ }
+diff --git a/src/transactions/TransactionFrameBase.h b/src/transactions/TransactionFrameBase.h
+index 1893140d..1bacf285 100644
+--- a/src/transactions/TransactionFrameBase.h
++++ b/src/transactions/TransactionFrameBase.h
+@@ -7,6 +7,7 @@
+ #include "ledger/LedgerHashUtils.h"
+ #include "overlay/StellarXDR.h"
+ #include "util/UnorderedSet.h"
++#include "herder/TransactionCommutativityRequirements.h"
+ 
+ namespace stellar
+ {
+@@ -51,6 +52,19 @@ class TransactionFrameBase
+     virtual AccountID getFeeSourceID() const = 0;
+     virtual AccountID getSourceID() const = 0;
+ 
++
++    virtual bool isCommutativeTransaction() const = 0;
++    virtual bool commutativityWellFormednessChecks() const = 0;
++
++    virtual std::optional<TransactionCommutativityRequirements>
++    getCommutativityRequirements(AbstractLedgerTxn& ltx) const = 0;
++
++    virtual std::optional<TransactionCommutativityRequirements>
++    getCommutativityRequirementsNoFees(AbstractLedgerTxn& ltx) const = 0;
++
++    virtual UnorderedSet<AccountID>
++    getRelevantAccounts() const = 0;
++
+     virtual void
+     insertKeysForFeeProcessing(UnorderedSet<LedgerKey>& keys) const = 0;
+     virtual void insertKeysForTxApply(UnorderedSet<LedgerKey>& keys) const = 0;
+diff --git a/src/transactions/TransactionUtils.cpp b/src/transactions/TransactionUtils.cpp
+index 29de9e6f..380b3a1c 100644
+--- a/src/transactions/TransactionUtils.cpp
++++ b/src/transactions/TransactionUtils.cpp
+@@ -43,6 +44,15 @@ prepareAccountEntryExtensionV2(AccountEntry& ae)
+     }
+     return extV1.ext.v2();
+ }
++AccountEntryExtensionV3&
++prepareAccountEntryExtensionV3(AccountEntry& ae)
++{
++    auto& extV2 = prepareAccountEntryExtensionV2(ae);
++    if (extV2.ext.v() == 0) {
++        extV2.ext.v(3);
++    }
++    return extV2.ext.v3();
++}
+ 
+ TrustLineEntry::_ext_t::_v1_t&
+ prepareTrustLineEntryExtensionV1(TrustLineEntry& tl)
+@@ -89,6 +99,95 @@ getAccountEntryExtensionV2(AccountEntry& ae)
+     return ae.ext.v1().ext.v2();
+ }
+ 
++AccountEntryExtensionV3&
++getAccountEntryExtensionV3(AccountEntry& ae)
++{
++    if (ae.ext.v() != 1 || ae.ext.v1().ext.v() != 2 || ae.ext.v1().ext.v2().ext.v() != 3)
++    {
++        throw std::runtime_error("expected AccountEntry extension V3");
++    }
++    return ae.ext.v1().ext.v2().ext.v3();
++}
++
++AccountEntryExtensionV3 const&
++getAccountEntryExtensionV3(AccountEntry const& ae)
++{
++    if (ae.ext.v() != 1 || ae.ext.v1().ext.v() != 2 || ae.ext.v1().ext.v2().ext.v() != 3)
++    {
++        throw std::runtime_error("expected AccountEntry extension V3");
++    }
++    return ae.ext.v1().ext.v2().ext.v3();
++}
++
++bool hasIssuedAssetLog(AccountEntry const& ae, AssetCode const& code)
++{
++    if (!hasAccountEntryExtV3(ae)) {
++        return false;
++    }
++    auto const& v3 = getAccountEntryExtensionV3(ae);
++    for (auto& issuedLog : v3.issuedAmounts) {
++        if (issuedLog.code == code) {
++            return true;
++        }
++    }
++    return false;
++}
++
++IssuedAssetLog& getIssuedAssetLog(AccountEntry& ae, AssetCode const& code) {
++    auto& v3 = getAccountEntryExtensionV3(ae);
++    for (auto& issuedLog : v3.issuedAmounts) {
++        if (issuedLog.code == code) {
++            return issuedLog;
++        }
++    }
++    throw std::runtime_error("issued asset code not found");
++}
++
++IssuedAssetLog const& getIssuedAssetLog(AccountEntry const& ae, AssetCode const& code) {
++    auto const& v3 = getAccountEntryExtensionV3(ae);
++    for (auto const& issuedLog : v3.issuedAmounts) {
++        if (issuedLog.code == code) {
++            return issuedLog;
++        }
++    }
++    throw std::runtime_error("issued asset code not found");
++}
++
++static bool
++IssuedAssetLogSorter(IssuedAssetLog const& l1, IssuedAssetLog const& l2) {
++    return l1.code < l2.code;
++}
++
++void addNewIssuedAssetLog(AccountEntry& ae, AssetCode const& code) {
++    if (hasIssuedAssetLog(ae, code)) {
++        throw std::runtime_error("asset issuance log already exists");
++    }
++
++    if (!hasAccountEntryExtV3(ae)) {
++        prepareAccountEntryExtensionV3(ae);
++    }
++
++    auto& v3 = getAccountEntryExtensionV3(ae);
++
++    IssuedAssetLog newLog;
++    newLog.code = code;
++    newLog.issuedAmount = 0;
++    v3.issuedAmounts.push_back(newLog);
++    std::sort(v3.issuedAmounts.begin(), v3.issuedAmounts.end(), IssuedAssetLogSorter);
++}
++
++void trimIssuedAssetLog(AccountEntry& ae, AssetCode const& code) {
++    auto& v3 = getAccountEntryExtensionV3(ae);
++    for (auto iter = v3.issuedAmounts.begin(); iter != v3.issuedAmounts.end(); iter++) {
++        if (iter -> code == code) {
++            v3.issuedAmounts.erase(iter);
++            return;
++        }
++    }
++    throw std::runtime_error("can't delete nonexistent issuance log!");
++}
++
++
+ TrustLineEntryExtensionV2&
+ getTrustLineEntryExtensionV2(TrustLineEntry& tl)
+ {
+@@ -186,6 +285,13 @@ liquidityPoolKey(PoolID const& poolID)
+     return key;
+ }
+ 
++LedgerKey speedexConfigKey()
++{
++    LedgerKey key(SPEEDEX_CONFIG);
++    return key;
++}
++
++
+ LedgerKey
+ poolShareTrustLineKey(AccountID const& accountID, PoolID const& poolID)
+ {
+
+@@ -301,6 +414,19 @@ loadSponsorshipCounter(AbstractLedgerTxn& ltx, AccountID const& sponsoringID)
+     return ltx.load(sponsorshipCounterKey(sponsoringID));
+ }
+ 
++LedgerTxnEntry
++loadSpeedexConfig(AbstractLedgerTxn& ltx)
++{
++    return ltx.load(speedexConfigKey());
++}
++
++SpeedexConfigSnapshotFrame
++loadSpeedexConfigSnapshot(AbstractLedgerTxn&ltx)
++{
++    std::printf("starting get config frame\n");
++    return SpeedexConfigSnapshotFrame(ltx.loadSnapshotEntry(speedexConfigKey()));
++}
++
+ LedgerTxnEntry
+ loadPoolShareTrustLine(AbstractLedgerTxn& ltx, AccountID const& accountID,
+                        PoolID const& poolID)
+@@ -475,6 +601,47 @@ addBalance(LedgerTxnHeader const& header, LedgerTxnEntry& entry, int64_t delta)
+     }
+ }
+ 
++bool issueAsset(LedgerTxnEntry& entry, AssetCode const& code, int64_t delta)
++{
++    if (entry.current().data.type() == ACCOUNT)
++    {
++        if (isIssuanceLimitedAccount(entry)) {
++            auto& ae = entry.current().data.account();
++            if (!hasAccountEntryExtV3(ae)) {
++                prepareAccountEntryExtensionV3(ae);
++            }
++            if (!hasIssuedAssetLog(ae, code)) {
++                addNewIssuedAssetLog(ae, code);
++            }
++            auto& log = getIssuedAssetLog(ae, code);
++
++            if (log.issuedAmount < 0) {
++                throw std::logic_error("started with a negative amount?!?");
++            }
++
++            if (INT64_MAX - log.issuedAmount < delta) {
++                return false;
++            }
++       
++            if (delta < 0 && log.issuedAmount + delta < 0)
++            {
++                // somehow debiting an account by more than was ever issued
++                return false;
++            }
++            log.issuedAmount += delta;
++            if (log.issuedAmount == 0) {
++                trimIssuedAssetLog(ae, code);
++            }
++            if (log.issuedAmount < 0) {
++                throw std::logic_error("somehow issued a negative amount of an asset!");
++            }
++            return true;
++        }
++        return true;
++    }
++    throw std::logic_error("can't issue on non Account entry");
++}
++
+ bool
+ addBuyingLiabilities(LedgerTxnHeader const& header, LedgerTxnEntry& entry,
+                      int64_t delta)
+@@ -623,6 +790,18 @@ getAvailableBalance(LedgerTxnHeader const& header,
+     return getAvailableBalance(header.current(), entry.current());
+ }
+ 
++int64_t 
++getAvailableBalance(LedgerTxnHeader const& header, AbstractLedgerTxn& ltx, AccountID account, Asset asset) {
++    if (asset.type() == ASSET_TYPE_NATIVE) {
++        auto accountEntry = loadAccount(ltx, account);
++        return getAvailableBalance(header.current(), accountEntry.current());
++    } else {
++        auto tl = loadTrustLine(ltx, account, asset);
++        return tl.getAvailableBalance(header);
++    }
++}
++
++
+ int64_t
+ getBuyingLiabilities(LedgerTxnHeader const& header, LedgerEntry const& le)
+ {
+@@ -876,6 +1055,58 @@ isAuthorizedToMaintainLiabilitiesUnsafe(uint32_t flags)
+     return (flags & TRUSTLINE_AUTH_FLAGS) != 0;
+ }
+ 
++bool
++isIssuanceLimitedAccount(uint32_t flags)
++{
++    return (flags & AUTH_ISSUANCE_LIMIT) != 0;
++}
++
++bool
++isIssuanceLimitedAccount(LedgerEntry const& entry)
++{
++    return isIssuanceLimitedAccount(entry.data.account().flags);
++}
++
++bool
++isIssuanceLimitedAccount(LedgerTxnEntry const& entry)
++{
++    return isIssuanceLimitedAccount(entry.current());
++}
++
++bool isCommutativeTxEnabledAsset(AbstractLedgerTxn& ltx, Asset const& asset) {
++    if (asset.type() == ASSET_TYPE_NATIVE) {
++        return true;
++    }
++    auto issuerID = getIssuer(asset);
++    auto acct = loadAccount(ltx, issuerID);
++    if (!acct) return false;
++    return isIssuanceLimitedAccount(acct.current());
++}
++
++bool isCommutativeTxEnabledAsset(AbstractLedgerTxn& ltx, TrustLineAsset const& tlAsset) {
++    auto asset = trustLineAssetToAsset(tlAsset);
++    // returns nullopt when asset is a pool share.
++    // TODO to make pool shares tradable on speedex, edit this (and also change
++    // speedexconfig to allow pool share assets, not just regular Asset types)
++    if (!asset) {
++        return false;
++    }
++    return isCommutativeTxEnabledAsset(ltx, *asset);
++}
++
++bool
++isCommutativeTxEnabledTrustLine(LedgerEntry const& le)
++{
++    return isAuthorizedToMaintainLiabilities(le)
++        && le.data.trustLine().limit == INT64_MAX;
++}
++
++bool
++isCommutativeTxEnabledTrustLine(LedgerTxnEntry const& entry)
++{
++    return isCommutativeTxEnabledTrustLine(entry.current());
++}
++
+ bool
+ isAuthorizedToMaintainLiabilities(LedgerEntry const& le)
+ {
+@@ -947,10 +1178,59 @@ isClawbackEnabledOnAccount(ConstLedgerTxnEntry const& entry)
+     return isClawbackEnabledOnAccount(entry.current());
+ }
+ 
++bool
++isImmutableAuth(LedgerEntry const& entry)
++{
++    return (entry.data.account().flags & AUTH_IMMUTABLE_FLAG) != 0;
++}
++
+ bool
+ isImmutableAuth(LedgerTxnEntry const& entry)
+ {
+-    return (entry.current().data.account().flags & AUTH_IMMUTABLE_FLAG) != 0;
++    return isImmutableAuth(entry.current());
++}
++
++
++
++int64_t 
++getRemainingAssetIssuance(LedgerEntry const& entry, AssetCode const& code)
++{
++    if (entry.data.type() == ACCOUNT)
++    {
++        auto issuedAmount = getIssuedAssetAmount(entry, code);
++        if (issuedAmount) {
++            return INT64_MAX - *issuedAmount;
++        }
++        return INT64_MAX;
++    }
++    throw std::logic_error("invalid asset issuance limit request");
++}
++
++int64_t
++getRemainingAssetIssuance(LedgerTxnEntry const& entry, AssetCode const& code)
++{
++    return getRemainingAssetIssuance(entry.current(), code);
++}
++
++std::optional<int64_t> 
++getIssuedAssetAmount(LedgerEntry const& entry, AssetCode const& code) {
++    if (entry.data.type() == ACCOUNT) {
++        if (!isIssuanceLimitedAccount(entry)) {
++            return std::nullopt;
++        }
++        auto& ae = entry.data.account();
++        if (!hasIssuedAssetLog(ae, code)) {
++            return 0;
++        }
++        auto const& issuedLog = getIssuedAssetLog(ae, code);
++        return issuedLog.issuedAmount;
++    }
++    throw std::logic_error("invalid assue issue amount request");
++}
++
++std::optional<int64_t> 
++getIssuedAssetAmount(LedgerTxnEntry const& entry, AssetCode const& code) {
++    return getIssuedAssetAmount(entry.current(), code);
+ }
+ 
+ void
+@@ -1089,6 +1369,12 @@ hasAccountEntryExtV2(AccountEntry const& ae)
+     return ae.ext.v() == 1 && ae.ext.v1().ext.v() == 2;
+ }
+ 
++bool 
++hasAccountEntryExtV3(AccountEntry const& ae)
++{
++    return hasAccountEntryExtV2(ae) && ae.ext.v1().ext.v2().ext.v() == 3;
++}
++
+ bool
+ hasTrustLineEntryExtV2(TrustLineEntry const& tl)
+ {
+@@ -1118,6 +1404,41 @@ getAsset(AccountID const& issuer, AssetCode const& assetCode)
+     return asset;
+ }
+ 
++Asset getNativeAsset()
++{
++    Asset asset;
++    asset.type(ASSET_TYPE_NATIVE);
++    return asset;
++}
++
++AssetCode getAssetCode(Asset const& asset)
++{
++    AssetCode out;
++    if (asset.type() == ASSET_TYPE_CREDIT_ALPHANUM4) {
++        out.type(ASSET_TYPE_CREDIT_ALPHANUM4);
++        out.assetCode4() = asset.alphaNum4().assetCode;
++        return out;
++    }
++    if (asset.type() == ASSET_TYPE_CREDIT_ALPHANUM12) {
++        out.type(ASSET_TYPE_CREDIT_ALPHANUM12);
++        out.assetCode12() = asset.alphaNum12().assetCode;
++        return out;
++    }
++    throw std::runtime_error("invalid asset type for making asset code");
++}
++
++/*
++AccountID getIssuer(Asset const& asset) {
++    if (asset.type() == ASSET_TYPE_CREDIT_ALPHANUM4) {
++        return asset.alphaNum4().issuer;
++    }
++    if (asset.type() == ASSET_TYPE_CREDIT_ALPHANUM12) {
++        return asset.alphaNum12().issuer;
++    }
++    throw std::runtime_error("unexpected asset type");
++} */
++
++
+ bool
+ claimableBalanceFlagIsValid(ClaimableBalanceEntry const& cb)
+ {
+@@ -1223,6 +1544,42 @@ changeTrustAssetToTrustLineAsset(ChangeTrustAsset const& ctAsset)
+     return tlAsset;
+ }
+ 
++std::optional<Asset>
++trustLineAssetToAsset(TrustLineAsset const& tlAsset) {
++    Asset asset;
++    switch(tlAsset.type()) {
++        case stellar::ASSET_TYPE_NATIVE:
++            asset.type(tlAsset.type());
++            break;
++        case stellar::ASSET_TYPE_CREDIT_ALPHANUM4:
++            asset.type(tlAsset.type());
++            asset.alphaNum4() = tlAsset.alphaNum4();
++            break;
++        case stellar::ASSET_TYPE_CREDIT_ALPHANUM12:
++            asset.type(tlAsset.type());    
++            asset.alphaNum12() = tlAsset.alphaNum12();
++            break;
++        case stellar::ASSET_TYPE_POOL_SHARE:
++            return std::nullopt;
++            break;
++        default:
++            throw std::runtime_error("unknown asset type");
++    }
++    return asset;
++}
++
++int64_t
++getPoolWithdrawalAmount(int64_t amountPoolShares, int64_t totalPoolShares,
++                        int64_t reserve)
++{
++    if (amountPoolShares > totalPoolShares)
++    {
++        throw std::runtime_error("Invalid amountPoolShares");
++    }
++
++    return bigDivide(amountPoolShares, reserve, totalPoolShares, ROUND_DOWN);
++}
++
+ namespace detail
+ {
+ struct MuxChecker
+@@ -1288,4 +1645,21 @@ makeClaimAtom(uint32_t ledgerVersion, AccountID const& accountID,
+     }
+     return atom;
+ }
++
++
++PoolID getPoolID(Asset const& selling, Asset const& buying) {
++    LiquidityPoolParameters params;
++    params.type(LIQUIDITY_POOL_CONSTANT_PRODUCT);
++    if (selling < buying) {
++        params.constantProduct().assetA = selling;
++        params.constantProduct().assetB = buying;
++    } else {
++        params.constantProduct().assetA = buying;
++        params.constantProduct().assetB = selling;
++    }
++    params.constantProduct().fee = LIQUIDITY_POOL_FEE_V18;
++
++    return xdrSha256(params);
++}
++
+ } // namespace stellar
+diff --git a/src/transactions/TransactionUtils.h b/src/transactions/TransactionUtils.h
+index 2d8651c3..e5b08e96 100644
+--- a/src/transactions/TransactionUtils.h
++++ b/src/transactions/TransactionUtils.h
+@@ -7,6 +7,7 @@
+ #include "xdr/Stellar-ledger-entries.h"
+ #include "xdr/Stellar-transaction.h"
+ #include <algorithm>
++#include <optional>
+ 
+ namespace stellar
+ {
+@@ -24,6 +25,7 @@ struct LedgerHeader;
+ struct LedgerKey;
+ struct TransactionEnvelope;
+ struct MuxedAccount;
++class SpeedexConfigSnapshotFrame;
+ 
+ template <typename IterType>
+ std::pair<IterType, bool>
+@@ -37,12 +39,22 @@ findSignerByKey(IterType begin, IterType end, SignerKey const& key)
+ 
+ AccountEntryExtensionV1& prepareAccountEntryExtensionV1(AccountEntry& ae);
+ AccountEntryExtensionV2& prepareAccountEntryExtensionV2(AccountEntry& ae);
++AccountEntryExtensionV3& prepareAccountEntryExtensionV3(AccountEntry& ae);
+ TrustLineEntry::_ext_t::_v1_t&
+ prepareTrustLineEntryExtensionV1(TrustLineEntry& tl);
+ TrustLineEntryExtensionV2& prepareTrustLineEntryExtensionV2(TrustLineEntry& tl);
+ LedgerEntryExtensionV1& prepareLedgerEntryExtensionV1(LedgerEntry& le);
+ 
+ AccountEntryExtensionV2& getAccountEntryExtensionV2(AccountEntry& ae);
++AccountEntryExtensionV3& getAccountEntryExtensionV3(AccountEntry& ae);
++AccountEntryExtensionV3 const& getAccountEntryExtensionV3(AccountEntry const& ae);
++
++bool hasIssuedAssetLog(AccountEntry const& ae, AssetCode const& code);
++IssuedAssetLog& getIssuedAssetLog(AccountEntry& ae, AssetCode const& code);
++IssuedAssetLog const& getIssuedAssetLog(AccountEntry const& ae, AssetCode const& code);
++void addNewIssuedAssetLog(AccountEntry& ae, AssetCode const& code);
++void trimIssuedAssetLog(AccountEntry& ae, AssetCode const& code);
++
+ TrustLineEntryExtensionV2& getTrustLineEntryExtensionV2(TrustLineEntry& le);
+ LedgerEntryExtensionV1& getLedgerEntryExtensionV1(LedgerEntry& le);
+ 
+@@ -53,10 +65,12 @@ LedgerKey offerKey(AccountID const& sellerID, uint64_t offerID);
+ LedgerKey dataKey(AccountID const& accountID, std::string const& dataName);
+ LedgerKey claimableBalanceKey(ClaimableBalanceID const& balanceID);
+ LedgerKey liquidityPoolKey(PoolID const& poolID);
++LedgerKey speedexConfigKey();
+ LedgerKey poolShareTrustLineKey(AccountID const& accountID,
+                                 PoolID const& poolID);
+ InternalLedgerKey sponsorshipKey(AccountID const& sponsoredID);
+ InternalLedgerKey sponsorshipCounterKey(AccountID const& sponsoringID);
+ 
+ uint32_t const FIRST_PROTOCOL_SUPPORTING_OPERATION_LIMITS = 11;
+ uint32_t const ACCOUNT_SUBENTRY_LIMIT = 1000;
+@@ -99,6 +113,9 @@ LedgerTxnEntry loadSponsorship(AbstractLedgerTxn& ltx,
+ LedgerTxnEntry loadSponsorshipCounter(AbstractLedgerTxn& ltx,
+                                       AccountID const& sponsoringID);
+ 
++LedgerTxnEntry loadSpeedexConfig(AbstractLedgerTxn& ltx);
++
++SpeedexConfigSnapshotFrame loadSpeedexConfigSnapshot(AbstractLedgerTxn& ltx);
+ LedgerTxnEntry loadPoolShareTrustLine(AbstractLedgerTxn& ltx,
+                                       AccountID const& accountID,
+                                       PoolID const& poolID);
+@@ -128,6 +145,8 @@ int64_t getAvailableBalance(LedgerTxnHeader const& header,
+ int64_t getAvailableBalance(LedgerTxnHeader const& header,
+                             ConstLedgerTxnEntry const& entry);
+ 
++int64_t getAvailableBalance(LedgerTxnHeader const& header, AbstractLedgerTxn& ltx, AccountID account, Asset asset);
++
+ int64_t getBuyingLiabilities(LedgerTxnHeader const& header,
+                              LedgerEntry const& le);
+ int64_t getBuyingLiabilities(LedgerTxnHeader const& header,
+@@ -177,6 +196,18 @@ bool isAuthorizedToMaintainLiabilities(LedgerEntry const& le);
+ bool isAuthorizedToMaintainLiabilities(LedgerTxnEntry const& entry);
+ bool isAuthorizedToMaintainLiabilities(ConstLedgerTxnEntry const& entry);
+ 
++bool isIssuanceLimitedAccount(uint32_t flags);
++// checks the asset issued by the account in entry
++bool isIssuanceLimitedAccount(LedgerEntry const& entry);
++bool isIssuanceLimitedAccount(LedgerTxnEntry const& entry);
++
++bool isCommutativeTxEnabledAsset(AbstractLedgerTxn& ltx, Asset const& asset);
++bool isCommutativeTxEnabledAsset(AbstractLedgerTxn& ltx, TrustLineAsset const& tlAsset);
++
++bool isCommutativeTxEnabledTrustLine(LedgerEntry const& le);
++bool isCommutativeTxEnabledTrustLine(LedgerTxnEntry const& entry);
++
++
+ bool isAuthRequired(ConstLedgerTxnEntry const& entry);
+ 
+ bool isClawbackEnabledOnTrustline(TrustLineEntry const& tl);
+@@ -187,8 +218,19 @@ bool isClawbackEnabledOnAccount(ConstLedgerTxnEntry const& entry);
+ bool isClawbackEnabledOnClaimableBalance(ClaimableBalanceEntry const& entry);
+ bool isClawbackEnabledOnClaimableBalance(LedgerEntry const& entry);
+ 
++bool isImmutableAuth(LedgerEntry const& entry);
+ bool isImmutableAuth(LedgerTxnEntry const& entry);
+ 
++int64_t getRemainingAssetIssuance(LedgerEntry const& entry, AssetCode const& code);
++int64_t getRemainingAssetIssuance(LedgerTxnEntry const& entry, AssetCode const& code);
++
++std::optional<int64_t> 
++getIssuedAssetAmount(LedgerEntry const& entry, AssetCode const& code);
++std::optional<int64_t> 
++getIssuedAssetAmount(LedgerTxnEntry const& entry, AssetCode const& code);
++
++bool issueAsset(LedgerTxnEntry& entry, AssetCode const& code, int64_t delta);
++
+ void releaseLiabilities(AbstractLedgerTxn& ltx, LedgerTxnHeader const& header,
+                         LedgerTxnEntry const& offer);
+ 
+@@ -209,9 +251,14 @@ bool hasMuxedAccount(TransactionEnvelope const& e);
+ uint64_t getUpperBoundCloseTimeOffset(Application& app, uint64_t lastCloseTime);
+ 
+ bool hasAccountEntryExtV2(AccountEntry const& ae);
++bool hasAccountEntryExtV3(AccountEntry const& ae);
+ bool hasTrustLineEntryExtV2(TrustLineEntry const& tl);
+ 
+ Asset getAsset(AccountID const& issuer, AssetCode const& assetCode);
++Asset getNativeAsset();
++AssetCode getAssetCode(Asset const& asset);
++
++//AccountID getIssuer(Asset const& asset);
+ 
+ bool claimableBalanceFlagIsValid(ClaimableBalanceEntry const& cb);
+ void removeOffersByAccountAndAsset(AbstractLedgerTxn& ltx,
+@@ -227,4 +274,14 @@ TrustLineAsset assetToTrustLineAsset(Asset const& asset);
+ TrustLineAsset
+ changeTrustAssetToTrustLineAsset(ChangeTrustAsset const& ctAsset);
+ ChangeTrustAsset assetToChangeTrustAsset(Asset const& asset);
++
++std::optional<Asset>
++trustLineAssetToAsset(TrustLineAsset const& tlAsset);
++
++int64_t getPoolWithdrawalAmount(int64_t amountPoolShares,
++                                int64_t totalPoolShares, int64_t reserve);
++
++PoolID getPoolID(Asset const& selling, Asset const& buying);
++
++
+
+ 
+diff --git a/src/xdr/Stellar-ledger-entries.x b/src/xdr/Stellar-ledger-entries.x
+index 9450e329..7c3a5dd4 100644
+--- a/src/xdr/Stellar-ledger-entries.x
++++ b/src/xdr/Stellar-ledger-entries.x
+@@ -97,7 +97,8 @@ enum LedgerEntryType
+     OFFER = 2,
+     DATA = 3,
+     CLAIMABLE_BALANCE = 4,
+-    LIQUIDITY_POOL = 5
++    LIQUIDITY_POOL = 5,
++    SPEEDEX_CONFIG = 6
+ };
+ 
+ struct Signer
+@@ -121,18 +122,39 @@ enum AccountFlags
+     // Trustlines are created with clawback enabled set to "true",
+     // and claimable balances created from those trustlines are created
+     // with clawback enabled set to "true"
+-    AUTH_CLAWBACK_ENABLED_FLAG = 0x8
++    AUTH_CLAWBACK_ENABLED_FLAG = 0x8,
++    // Asset issuance amount limited to INT64_MAX
++    AUTH_ISSUANCE_LIMIT = 0x10
+ };
+ 
+ // mask for all valid flags
+ const MASK_ACCOUNT_FLAGS = 0x7;
+-const MASK_ACCOUNT_FLAGS_V17 = 0xF;
++//TODO note -- this breaks historical catchup, but only because
++// I don't want to go to the trouble of creating a new version
++const MASK_ACCOUNT_FLAGS_V17 = 0x1F;
+ 
+ // maximum number of signers
+ const MAX_SIGNERS = 20;
+ 
+ typedef AccountID* SponsorshipDescriptor;
+ 
++struct IssuedAssetLog {
++    AssetCode code;
++    int64 issuedAmount;
++};
++
++struct AccountEntryExtensionV3
++{
++    IssuedAssetLog issuedAmounts<>; // sort by asset
++
++    union switch(int v)
++    {
++    case 0:
++        void;
++    }
++    ext;
++};
++
+ struct AccountEntryExtensionV2
+ {
+     uint32 numSponsored;
+@@ -143,6 +165,8 @@ struct AccountEntryExtensionV2
+     {
+     case 0:
+         void;
++    case 3:
++        AccountEntryExtensionV3 v3;
+     }
+     ext;
+ };
+
+@@ -473,6 +497,11 @@ struct LiquidityPoolEntry
+     body;
+ };
+ 
++struct SpeedexConfigEntry
++{
++    Asset speedexAssets<>;  
++};
++
+ struct LedgerEntryExtensionV1
+ {
+     SponsorshipDescriptor sponsoringID;
+@@ -503,6 +532,8 @@ struct LedgerEntry
+         ClaimableBalanceEntry claimableBalance;
+     case LIQUIDITY_POOL:
+         LiquidityPoolEntry liquidityPool;
++    case SPEEDEX_CONFIG:
++        SpeedexConfigEntry speedexConfig;
+     }
+     data;
+ 
+@@ -557,6 +588,8 @@ case LIQUIDITY_POOL:
+     {
+         PoolID liquidityPoolID;
+     } liquidityPool;
++case SPEEDEX_CONFIG:
++    void;
+ };
+ 
+ // list of all envelope types used in the application
+@@ -570,6 +603,7 @@ enum EnvelopeType
+     ENVELOPE_TYPE_AUTH = 3,
+     ENVELOPE_TYPE_SCPVALUE = 4,
+     ENVELOPE_TYPE_TX_FEE_BUMP = 5,
+-    ENVELOPE_TYPE_OP_ID = 6
++    ENVELOPE_TYPE_OP_ID = 6,
++    ENVELOPE_TYPE_TX_COMMUTATIVE = 7
+ };
+ }
+diff --git a/src/xdr/Stellar-transaction.x b/src/xdr/Stellar-transaction.x
+index 3d0f3c5b..0677480e 100644
+--- a/src/xdr/Stellar-transaction.x
++++ b/src/xdr/Stellar-transaction.x
+@@ -56,7 +56,9 @@ enum OperationType
+     CLAWBACK = 19,
+     CLAWBACK_CLAIMABLE_BALANCE = 20,
+     SET_TRUST_LINE_FLAGS = 21,
+-    LIQUIDITY_POOL_DEPOSIT = 22
++    CREATE_SPEEDEX_IOC_OFFER = 22,
++    LIQUIDITY_POOL_DEPOSIT = 23,
++    LIQUIDITY_POOL_WITHDRAW = 24
+ };
+ 
+ /* CreateAccount
+@@ -433,6 +435,32 @@ struct SetTrustLineFlagsOp
+     uint32 setFlags;   // which flags to set
+ };
+ 
++
++/* CreateSpeedexIOCOfferOp
++
++    Create Speedex IoC (Immediate-or-Cancel) offer.
++    Threshold: med
++
++    Trades sellAmount units of sellAsset at minimum
++    rate of minPrice;
++*/
++
++struct CreateSpeedexIOCOfferOp
++{
++    Asset sellAsset;
++    Asset buyAsset;
++    int64 sellAmount;
++    Price minPrice;
++};
++
++struct SpeedexIOCOfferHashContents
++{
++    AccountID sourceAccount;
++    Price minPrice;
++    uint64 seqNum;
++    uint32 opIdx;
++};
+
+@@ -504,8 +546,12 @@ struct Operation
+         ClawbackClaimableBalanceOp clawbackClaimableBalanceOp;
+     case SET_TRUST_LINE_FLAGS:
+         SetTrustLineFlagsOp setTrustLineFlagsOp;
++    case CREATE_SPEEDEX_IOC_OFFER:
++        CreateSpeedexIOCOfferOp createSpeedexIOCOfferOp;
+     case LIQUIDITY_POOL_DEPOSIT:
+         LiquidityPoolDepositOp liquidityPoolDepositOp;
+     }
+     body;
+ };
+@@ -634,6 +680,7 @@ struct FeeBumpTransaction
+     case ENVELOPE_TYPE_TX:
+         TransactionV1Envelope v1;
++    case EVENLOPE_TYPE_TX_COMMUTATIVE:
++        CommutativeTransactionEnvelope commutativeTx;
+     }
+     innerTx;
+     union switch (int v)
+     {
+@@ -651,6 +698,26 @@ struct FeeBumpTransactionEnvelope
+     DecoratedSignature signatures<20>;
+ };
+ 
++struct CommutativeTransaction
++{
++    MuxedAccount sourceAccount;
++    uint32 fee;
++    SequenceNumber seqNum;
++
++    TimeBounds* timeBounds;
++
++    Memo memo;
++
++    Operation operations<MAX_OPS_PER_TX>;
++};
++
++struct CommutativeTransactionEnvelope
++{
++    CommutativeTransaction tx;
++
++    DecoratedSignature signatures<20>;
++};
++
+ /* A TransactionEnvelope wraps a transaction with signatures. */
+ union TransactionEnvelope switch (EnvelopeType type)
+ {
+@@ -660,6 +727,8 @@ case ENVELOPE_TYPE_TX:
+     TransactionV1Envelope v1;
+ case ENVELOPE_TYPE_TX_FEE_BUMP:
+     FeeBumpTransactionEnvelope feeBump;
++case ENVELOPE_TYPE_TX_COMMUTATIVE:
++    CommutativeTransactionEnvelope commutativeTx;
+ };
+ 
+ struct TransactionSignaturePayload
+@@ -672,6 +741,7 @@ struct TransactionSignaturePayload
+         Transaction tx;
+     case ENVELOPE_TYPE_TX_FEE_BUMP:
+         FeeBumpTransaction feeBump;
+     }
+     taggedTransaction;
+ };
+@@ -1312,6 +1382,29 @@ default:
+     void;
+ };
+ 
++enum CreateSpeedexIOCOfferResultCode
++{
++    CREATE_SPEEDEX_IOC_OFFER_SUCCESS = 0,
++    CREATE_SPEEDEX_IOC_OFFER_NO_SPEEDEX_CONFIG = -1,
++    CREATE_SPEEDEX_IOC_OFFER_INVALID_TRADING_PAIR = -2,
++    CREATE_SPEEDEX_IOC_OFFER_INSUFFICIENT_BALANCE = -3,
++    CREATE_SPEEDEX_IOC_OFFER_MALFORMED = -4
++};
++
++struct SpeedexOfferClearingStatus
++{
++    int64 soldAmount;
++    int64 boughtAmount;
++};
++
++union CreateSpeedexIOCOfferResult switch (CreateSpeedexIOCOfferResultCode code)
++{
++case CREATE_SPEEDEX_IOC_OFFER_SUCCESS:
++    SpeedexOfferClearingStatus trade;
++default:
++    void;
++};
++
+
+@@ -1404,8 +1524,12 @@ case opINNER:
+         ClawbackClaimableBalanceResult clawbackClaimableBalanceResult;
+     case SET_TRUST_LINE_FLAGS:
+         SetTrustLineFlagsResult setTrustLineFlagsResult;
++    case CREATE_SPEEDEX_IOC_OFFER:
++        CreateSpeedexIOCOfferResult createSpeedexIOCOfferResult;
+     case LIQUIDITY_POOL_DEPOSIT:
+         LiquidityPoolDepositResult liquidityPoolDepositResult;
++    case LIQUIDITY_POOL_WITHDRAW:
++        LiquidityPoolWithdrawResult liquidityPoolWithdrawResult;
+     }
+     tr;
+ default:
+@@ -1433,7 +1557,8 @@ enum TransactionResultCode
+ 
+     txNOT_SUPPORTED = -12,         // transaction type not supported
+     txFEE_BUMP_INNER_FAILED = -13, // fee bump inner transaction failed
+-    txBAD_SPONSORSHIP = -14        // sponsorship not confirmed
++    txBAD_SPONSORSHIP = -14,       // sponsorship not confirmed
++    txBAD_COMMUTATIVITY_CONTEXT = -15 // noncommutative op in commutative envelope
+ };
+ 
+ // InnerTransactionResult must be binary compatible with TransactionResult
