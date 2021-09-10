@@ -192,9 +192,6 @@ LiquidityPoolFrame::amountOfferedForSaleTimesSellPrice(uint64_t sellPrice, uint6
 
 	uint128_t total = top - bot;
 
-	//uint128_t total = ((uint128_t) sellPrice) * ((uint128_t) firstTerm)
-//		- ((uint128_t) secondTermA) * ((uint128_t) secondTermB);
-
 	constexpr uint128_t INT128_MAX = (((uint128_t)1) << 127) - 1;
 
 	if (total > INT128_MAX) {
@@ -202,6 +199,10 @@ LiquidityPoolFrame::amountOfferedForSaleTimesSellPrice(uint64_t sellPrice, uint6
 		total = INT128_MAX;
 	}
 
+	// Round again, to ensure we don't have to round against the liquidity pool later.
+	// An offer can always offer to sell (amount * price), but the liquidity pool cannot
+	// -- it offers some amount * price, but the amount is non integral.
+	// The actual offered value is floor(amount) * price.
 	uint128_t roundingError = total % static_cast<uint128_t>(sellPrice);
 
 	total -= roundingError;

@@ -180,9 +180,9 @@ Errata:
           - Not currently used.  One option for a stopping criterion for Tatonnement would be to say "Would the market clear if we charged an epsilon fee".
           - Note that even with this criterion in Tatonnement, it would not be used in the LP solver (i.e. no fee is actually charged).
           - The actual rate is 2^-mTaxRate.
-        .mSmoothMult = 5,
+        .mSmoothMult = 7,
           - Each offer's optimal behavior is a discontinuous function.  This parameter defines a continuous approximation.
-          - Mu := 2^-mSmoothMult
+          - Mu := 2^-mSmoothMult (At this setting, Mu is roughly 1%)
           - Unapproximated:
              - Offer trades iff offer.minPrice < market_price
           - Approximated:
@@ -214,7 +214,32 @@ Errata:
       - This relaxes a typical step-size choice criterion common to the numerical optimization literature (Wolfe conditions).
       - Need the relaxation because (1) the choice of objective may not actually be convex, so we do not wish to get stuck and (2) for Tatonnement,
         making any step is often better than finding the step of the perfect size.
+    
+    Prices are initialized at 2^32.  This is for numerical stability - if prices are too small, than the smallest price increment (1) induces
+    a comparatively large change in aggregate demand.
 
+    Prices are bounded between 1 and 2^{64 - mSmoothMult}.  The 64 limit is because prices are represented as 64-bit integers, and the mSmoothMult
+    factor is needed to ensure intermediate computations do not overflow (although the analysis that led to this bound is very conservative, and may
+    be unnecessary).  There is a point within the demand calculation where a quantity is left-shifted by mSmoothMult.
+
+    It is inconvenient, but not a huge problem, if prices run into the maximum limit.
+
+    A possible addition to the Tatonnement loop would be to renormalize prices if one price becomes too large or too small.  
+    However, the sum of the price-weighted demand (sum over all assets) at any price point is 0.  As such, the geometric mean of prices is preserved
+    throughout Tatonnement (up to rounding error), and there is no overall price drift as Tatonnement runs.  I did not implement this feature
+    for this Tatonnement implementation.  I did implement this for the SOSP version, and found it to be not particularly helpful (although 
+    it did help with numerical stability in very rare circumstances).
+
+    Each step of Tatonnement does, in fact, multiply the step size by 2^{-mStepRadix}.  This is primarily for numerical stability.  The price
+    update rule within Tatonnement is as follows:
+     - price += (((net demand) * price * price * step_size) >> mStepRadix)
+         - Net demand is an int64
+         - Price is a uint64 (the starting price is 2^32)
+         - step_size is a uint64, and adjusted heuristically
+
+         (The price update rule is not implemented using that exact formula to prevent overflows).
+
+         We need some relatively large mStepRadix to compensate for the fact that price * price >> price.
 
 Other files:
   - uint256_t.[h|cpp] implements a few 256-bit integer operations.  Used inside Tatonnement.
