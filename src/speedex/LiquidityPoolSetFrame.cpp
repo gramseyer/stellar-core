@@ -6,6 +6,8 @@
 
 #include <utility>
 
+#include "util/types.h"
+
 namespace stellar
 {
 
@@ -58,7 +60,13 @@ LiquidityPoolSetFrame::demandQuery(std::map<Asset, uint64_t> const& prices, Supp
 {
 	for (auto const& [tradingPair, lpFrame] : mLiquidityPools)
 	{
-		auto sellAmountTimesPrice = lpFrame.amountOfferedForSaleTimesSellPrice(prices.at(tradingPair.selling), prices.at(tradingPair.buying));
+		int128_t sellAmountTimesPrice = lpFrame.amountOfferedForSaleTimesSellPrice(prices.at(tradingPair.selling), prices.at(tradingPair.buying));
+
+		std::printf("lp sell %s buy %s: %lf %ld\n", 
+			assetToString(tradingPair.selling).c_str(),
+			assetToString(tradingPair.buying).c_str(),
+			(double) sellAmountTimesPrice,
+			(int64_t) sellAmountTimesPrice);
 
 		supplyDemand.addSupplyDemand(tradingPair, sellAmountTimesPrice);
 	}

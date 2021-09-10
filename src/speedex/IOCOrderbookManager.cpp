@@ -196,6 +196,12 @@ IOCOrderbookManager::demandQuery(
 
 		auto tradeAmount = orderbook.cumulativeOfferedForSaleTimesPrice(sellPrice, buyPrice, smoothMult);
 
+		std::printf("ob sell %s buy %s: %lf\n", 
+			assetToString(assetPair.selling).c_str(),
+			assetToString(assetPair.buying).c_str(),
+			(double) tradeAmount);
+
+
 		supplyDemand.addSupplyDemand(assetPair, tradeAmount);
 	}
 }

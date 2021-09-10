@@ -19,7 +19,6 @@
 using namespace stellar;
 using namespace stellar::txtest;
 
-
 TEST_CASE("orderbook against lp", "[speedex]")
 {
 
@@ -94,7 +93,7 @@ TEST_CASE("orderbook against lp", "[speedex]")
 		{
 		    LedgerTxn ltx(app->getLedgerTxnRoot());
 
-			poolID = createLiquidityPool(assets[0], assets[1], 100000, 100000, ltx);
+			poolID = createLiquidityPool(assets[0], assets[1], 1000000, 1000000, ltx);
 
 			setSpeedexAssets(ltx, assets);
 

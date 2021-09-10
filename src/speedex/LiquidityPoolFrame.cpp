@@ -176,21 +176,35 @@ LiquidityPoolFrame::amountOfferedForSaleTimesSellPrice(uint64_t sellPrice, uint6
 	// Rounding in this manner underestimates available trade amounts, but this is ok.
 	// Better to underestimate than overestimate.
 	uint64_t firstTerm = hackyBigSquareRootRoundDown(sellAmount, priceD);
-	//std::printf("firstTerm: %llu\n", firstTerm);
+	std::printf("firstTerm: %llu\n", firstTerm);
 
 	uint64_t secondTermA = hackyBigSquareRootRoundUp(buyAmount, buyPrice);
 	uint64_t secondTermB = hackyBigSquareRootRoundUp(sellAmount, sellPrice);
 
-	//std::printf("secondTermA %llu secondTermB %llu\n", secondTermA, secondTermB);
+	std::printf("secondTermA %llu secondTermB %llu\n", secondTermA, secondTermB);
 
-	uint128_t total = ((uint128_t) sellPrice) * ((uint128_t) firstTerm)
-		- ((uint128_t) secondTermA) * ((uint128_t) secondTermB);
+	uint128_t top = static_cast<uint128_t>(sellPrice) * static_cast<uint128_t>(firstTerm);
+	uint128_t bot = static_cast<uint128_t>(secondTermA) * static_cast<uint128_t>(secondTermB);
+
+	if (top < bot) {
+		return 0;
+	}
+
+	uint128_t total = top - bot;
+
+	//uint128_t total = ((uint128_t) sellPrice) * ((uint128_t) firstTerm)
+//		- ((uint128_t) secondTermA) * ((uint128_t) secondTermB);
 
 	constexpr uint128_t INT128_MAX = (((uint128_t)1) << 127) - 1;
 
 	if (total > INT128_MAX) {
-		return INT128_MAX;
+		std::printf("returning max\n");
+		total = INT128_MAX;
 	}
+
+	uint128_t roundingError = total % static_cast<uint128_t>(sellPrice);
+
+	total -= roundingError;
 	return total;
 }
 
@@ -227,13 +241,18 @@ LiquidityPoolFrame::amountOfferedForSale(uint64_t sellPrice, uint64_t buyPrice) 
 
 void 
 LiquidityPoolFrame::assertValidSellAmount(int64_t sellAmount, uint64_t sellPrice, uint64_t buyPrice) const {
-	
-	std::printf("sellPrice %llu buyPrice %llu amountOfferedForSale %lld sellAmount %lld\n",
+
+	int128_t offeredAmt = amountOfferedForSaleTimesSellPrice(sellPrice, buyPrice);
+	int128_t queriedAmt = static_cast<int128_t>(sellAmount) * static_cast<int128_t>(sellPrice);
+
+	std::printf("sellPrice %llu buyPrice %llu amountOfferedForSaleTimesPrice %lf sellAmount %lld queriedAmt %lf\n",
 			sellPrice,
 			buyPrice,
-			amountOfferedForSale(sellPrice, buyPrice),
-			sellAmount);
-	if (sellAmount > amountOfferedForSale(sellPrice, buyPrice)) {
+			(double) offeredAmt,
+			sellAmount,
+			(double) queriedAmt);
+
+	if (queriedAmt > offeredAmt) {
 		throw std::runtime_error("invalid sell amount!");
 	}
 	if (sellAmount < 0) {

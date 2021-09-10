@@ -44,7 +44,7 @@ SpeedexConfigSnapshotFrame::getControls() const
 	return TatonnementControlParams
     {
         .mTaxRate = 5,
-        .mSmoothMult = 5,
+        .mSmoothMult = 7,
         .mMaxRounds = 1000,
         .mStepUp = 45,
         .mStepDown = 25,

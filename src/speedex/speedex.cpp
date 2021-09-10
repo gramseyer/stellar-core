@@ -30,7 +30,7 @@ runSpeedex(AbstractLedgerTxn& ltx)
     TatonnementControlParams controls = speedexConfig.getControls();
     auto prices = speedexConfig.getStartingPrices();
 
-    oracle.computePrices(controls, prices);
+    oracle.computePrices(controls, prices, 1);
 
     std::printf("PRICES\n");
     for (auto const& [asset, price] : prices)

@@ -91,7 +91,7 @@ TatonnementControlParamsWrapper::setTrialPrice(uint64_t curPrice, int128_t const
 
 	int64_t delta = (product.compress(mParams.mStepRadix));
 
-	std::printf("delta = %llx\n", delta);
+	std::printf("delta = %llx sign = %d\n", delta, sign);
 
 	uint64_t candidateOut;
 	if (sign > 0) {
