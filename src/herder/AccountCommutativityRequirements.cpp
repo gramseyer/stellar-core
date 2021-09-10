@@ -76,6 +76,19 @@ AccountCommutativityRequirements::checkCanAddAssetRequirement(
 	return true;
 }
 
+void 
+AccountCommutativityRequirements::setCachedAccountHasSufficientBalanceCheck(bool res)
+{
+	mCacheValid = true;
+	mCheckAccountResult = res;
+}
+
+void 
+AccountCommutativityRequirements::invalidateCachedCheck()
+{
+	mCacheValid = false;
+}
+
 bool
 AccountCommutativityRequirements::tryAddAssetRequirement(
 	AbstractLedgerTxn& ltx, Asset asset, int64_t amount)
@@ -86,6 +99,8 @@ AccountCommutativityRequirements::tryAddAssetRequirement(
 
 	auto& currentRequirement = *getRequirement(asset);
 
+	invalidateCachedCheck();
+
 	currentRequirement += amount;
 	return true;
 }
@@ -94,6 +109,8 @@ void
 AccountCommutativityRequirements::addAssetRequirement(
 	Asset asset, std::optional<int64_t> amount)
 {
+	invalidateCachedCheck();
+
 	if (mRequiredAssets.find(asset) == mRequiredAssets.end()) {
 		mRequiredAssets.emplace(asset, 0);
 	}
@@ -124,7 +141,6 @@ AccountCommutativityRequirements::checkAvailableBalanceSufficesForNewRequirement
 	LedgerTxnHeader& header, AbstractLedgerTxn& ltx, Asset asset, int64_t amount)
 {
 	if (!checkCanAddAssetRequirement(ltx, asset, amount)) {
-		std::printf("checkCanAddAssetRequirement fail\n");
 		return false;
 	}
 	auto& currentRequirement = getRequirement(asset);
@@ -139,10 +155,8 @@ AccountCommutativityRequirements::checkAvailableBalanceSufficesForNewRequirement
 	std::printf("curBal %lld curReq %lld amount %lld", currentBalance, *currentRequirement, amount);
 
 	if (amount + *currentRequirement <= currentBalance) {
-		std::printf("good result, return true\n");
 		return true;
 	}
-	std::printf("currentBalance was too small\n");
 	return false;
 }
 
@@ -164,23 +178,32 @@ AccountCommutativityRequirements::cleanZeroedEntries()
 
 bool 
 AccountCommutativityRequirements::checkAccountHasSufficientBalance(AbstractLedgerTxn& ltx, LedgerTxnHeader& header) {
+	if (mCacheValid)
+	{
+		return mCheckAccountResult;
+	}
+
 	for (auto const& [asset, amount] : mRequiredAssets) {
 		if (!isCommutativeTxEnabledAsset(ltx, asset)) {
+			setCachedAccountHasSufficientBalanceCheck(false);
 			return false;
 		}
 		if (!checkTrustLine(ltx, asset)) {
+			setCachedAccountHasSufficientBalanceCheck(false);
 			return false;
 		}
 		if (!amount) {
+			setCachedAccountHasSufficientBalanceCheck(false);
 			return false;
 		}
 		std::printf("requirement: %ld currentBalance %ld\n", *amount, getAvailableBalance(header, ltx, mSourceAccount, asset));
 
 		if (*amount > getAvailableBalance(header, ltx, mSourceAccount, asset)) {
-
+			setCachedAccountHasSufficientBalanceCheck(false);
 			return false;
 		}
 	}
+	setCachedAccountHasSufficientBalanceCheck(true);
 	return true;
 }
 

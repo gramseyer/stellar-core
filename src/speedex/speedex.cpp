@@ -16,6 +16,8 @@ namespace stellar
 SpeedexResults
 runSpeedex(AbstractLedgerTxn& ltx)
 {
+
+    bool printDiagnostics = false;
     auto& speedexOrderbooks = ltx.getSpeedexIOCOffers();
     speedexOrderbooks.sealBatch();
 
@@ -30,12 +32,15 @@ runSpeedex(AbstractLedgerTxn& ltx)
     TatonnementControlParams controls = speedexConfig.getControls();
     auto prices = speedexConfig.getStartingPrices();
 
-    oracle.computePrices(controls, prices, 1);
+    oracle.computePrices(controls, prices, printDiagnostics ? 1 : 0);
 
-    std::printf("PRICES\n");
-    for (auto const& [asset, price] : prices)
+    if (printDiagnostics)
     {
-        std::printf("%llu\n", price);
+        std::printf("PRICES\n");
+        for (auto const& [asset, price] : prices)
+        {
+            std::printf("%llu\n", price);
+        }
     }
 
     TradeMaximizingSolver solver(speedexConfig.getAssets());

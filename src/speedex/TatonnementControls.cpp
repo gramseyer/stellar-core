@@ -66,7 +66,7 @@ TatonnementControlParamsWrapper::setTrialPrice(uint64_t curPrice, int128_t const
 {
 	/*
 
-	p -> p * (1 + demand * step), where demand is (already) weighted by pricel
+	p -> p * (1 + demand * step), where demand is (already) weighted by price
 
 	p += p * demand * step
 
@@ -76,8 +76,6 @@ TatonnementControlParamsWrapper::setTrialPrice(uint64_t curPrice, int128_t const
 
 
 	uint128_t step_times_old_price = ((uint128_t) curPrice) * ((uint128_t) stepSize);
-
-	std::printf("%lf\n", (double) step_times_old_price);
 	
 	// want step_times_old_price * demand >> mParams.mStepRadix;
 
@@ -85,13 +83,9 @@ TatonnementControlParamsWrapper::setTrialPrice(uint64_t curPrice, int128_t const
 
 	uint128_t unsignedDemand = demand > 0 ? demand : -demand;
 
-	std::printf("%lf %lf\n", (double) demand, (double) unsignedDemand);
-
 	uint256_t product = uint256_t::product(step_times_old_price, unsignedDemand);
 
 	int64_t delta = (product.compress(mParams.mStepRadix));
-
-	std::printf("delta = %llx sign = %d\n", delta, sign);
 
 	uint64_t candidateOut;
 	if (sign > 0) {

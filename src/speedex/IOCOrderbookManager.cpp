@@ -104,6 +104,9 @@ IOCOrderbookManager::sealBatch() {
 }
 
 void IOCOrderbookManager::returnToSource(AbstractLedgerTxn& ltx, Asset asset, int64_t amount) {
+
+	auto str = assetToString(asset);
+	std::printf("Returning %lld units of %s\n", amount, str.c_str());
 	if (asset.type() == ASSET_TYPE_NATIVE) {
 		auto header = ltx.loadHeader();
 		header.current().feePool += amount;
@@ -164,7 +167,14 @@ IOCOrderbookManager::clearBatch(AbstractLedgerTxn& ltx, const BatchSolution& sol
 	for (auto& target : orderbookTargets) {
 		auto assetPair = target.getAssetPair();
 
-		std::printf("realized sell %lld buy %lld\n", target.getRealizedSellAmount(), target.getRealizedBuyAmount());
+		auto sellStr = assetToString(assetPair.selling);
+		auto buyStr = assetToString(assetPair.buying);
+
+		std::printf("realized sell %s %lld buy %s %lld\n", 
+			sellStr.c_str(),
+			target.getRealizedSellAmount(),
+			buyStr.c_str(),
+			target.getRealizedBuyAmount());
 		roundingErrors[assetPair.selling] += target.getRealizedSellAmount();
 		roundingErrors[assetPair.buying] -= target.getRealizedBuyAmount();
 	}
@@ -196,10 +206,10 @@ IOCOrderbookManager::demandQuery(
 
 		auto tradeAmount = orderbook.cumulativeOfferedForSaleTimesPrice(sellPrice, buyPrice, smoothMult);
 
-		std::printf("ob sell %s buy %s: %lf\n", 
-			assetToString(assetPair.selling).c_str(),
-			assetToString(assetPair.buying).c_str(),
-			(double) tradeAmount);
+		//std::printf("ob sell %s buy %s: %lf\n", 
+		//	assetToString(assetPair.selling).c_str(),
+		//	assetToString(assetPair.buying).c_str(),
+		//	(double) tradeAmount);
 
 
 		supplyDemand.addSupplyDemand(assetPair, tradeAmount);

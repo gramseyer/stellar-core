@@ -17,7 +17,7 @@ TatonnementOracle::TatonnementOracle(DemandOracle const& demandOracle)
 {}
 
 void 
-TatonnementOracle::computePrices(TatonnementControlParams const& params, std::map<Asset, uint64_t>& prices, uint32_t printFrequency)
+TatonnementOracle::computePrices(TatonnementControlParams const& params, std::map<Asset, uint64_t>& prices, const uint32_t printFrequency)
 {
 	TatonnementControlParamsWrapper controlParams(params);
 
@@ -35,8 +35,6 @@ TatonnementOracle::computePrices(TatonnementControlParams const& params, std::ma
 
 		auto trialDemand = mDemandOracle.demandQuery(trialPrices, controlParams.smoothMult());
 
-		//demandQuery(trialPrices, trialDemand, controlParams.taxRate(), controlParams.smoothMult());
-
 		TatonnementObjectiveFn trialObjective = trialDemand.getObjective();
 
 		if (trialObjective.isBetterThan(baselineObjective, 1, 100) || stepSize < controlParams.kMinStepSize)
@@ -44,9 +42,7 @@ TatonnementOracle::computePrices(TatonnementControlParams const& params, std::ma
 			prices = trialPrices;
 
 			baselineDemand = mDemandOracle.demandQuery(prices, controlParams.smoothMult());
-			
-			//demandQuery(prices, baselineDemand, controlParams.taxRate(), controlParams.smoothMult());
-			
+						
 			baselineObjective = baselineDemand.getObjective();
 
 			stepSize = controlParams.stepUp(std::max(stepSize, controlParams.kMinStepSize));

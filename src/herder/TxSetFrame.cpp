@@ -387,7 +387,7 @@ TxSetFrame::checkOrTrim(Application& app,
                     if (justCheck) {
                         CLOG_DEBUG(
                             Herder,
-                            "Invalid TxSet: TODO logging");
+                            "Invalid TxSet: commutativity check failed");
                         return false;
                     }
                     while (iter != kv.second.end())
@@ -411,12 +411,11 @@ TxSetFrame::checkOrTrim(Application& app,
 
             auto relevantAccounts = (*iter)->getRelevantAccounts();
             for (auto acct : relevantAccounts) {
-                //TODO cache results of this check
                 if (!reqs.checkAccountHasSufficientBalance(acct, ltx, header)) {
                     if (justCheck) {
                         CLOG_DEBUG(
                             Herder,
-                            "Insufficient balance TODO logging");
+                            "Insufficient balance");
                         return false;
                     }
                     while (iter != accountTxs.end()) {

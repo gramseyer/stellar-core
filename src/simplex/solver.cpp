@@ -431,7 +431,6 @@ TradeMaximizingSolver::getSolution() const
 	{
 		auto amt = getRowResult(tradingPair);
 
-		std::printf("amt: %lld\n", amt);
 		if (amt > 0)
 		{
 			out[tradingPair] = amt;

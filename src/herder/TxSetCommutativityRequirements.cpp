@@ -44,7 +44,6 @@ TxSetCommutativityRequirements::canAddFee(LedgerTxnHeader& header, AbstractLedge
 void 
 TxSetCommutativityRequirements::addFee(AccountID feeAccount, int64_t fee) 
 {
-	std::printf("adding fee %d\n", fee);
 	getRequirements(feeAccount).addAssetRequirement(getNativeAsset(), fee);
 }
 

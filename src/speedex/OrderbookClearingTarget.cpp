@@ -54,22 +54,22 @@ OrderbookClearingTarget::clearOffer(AbstractLedgerTxn& ltx, const IOCOffer& offe
 	if (!checkPrice(offer)) {
 		throw std::logic_error("tried to clear offer with bad price!");
 	}
-	std::printf("clearing an offer with amount %lld\n", offer.mSellAmount);
+	std::printf("clearing an offer with amount %lld sellPrice (%ld / %ld) \n", offer.mSellAmount, offer.mMinPrice.n, offer.mMinPrice.d);
 
 	int128_t offeredSellRealization = static_cast<int128_t>(offer.mSellAmount) * static_cast<int128_t>(mSellPrice);
 
-	std::printf("offeredSellRealization (double %lf) %lld\n", (double) offeredSellRealization, (int64_t) offeredSellRealization);
+	//std::printf("offeredSellRealization (double %lf) %lld\n", (double) offeredSellRealization, (int64_t) offeredSellRealization);
 
 	int128_t curSellRealization = std::min(mTotalClearTarget - mRealizedClearTarget, offeredSellRealization);
 
 	mRealizedClearTarget += curSellRealization;
 
-	std::printf("curSellRealization (double %lf) %lld\n", (double) curSellRealization, (int64_t) curSellRealization);
+	//std::printf("curSellRealization (double %lf) %lld\n", (double) curSellRealization, (int64_t) curSellRealization);
 
 	int64_t sellAmount = getSellAmount(curSellRealization);
 	int64_t buyAmount = getBuyAmount(curSellRealization);
 
-	std::printf("sellAmount %lld buyAmount %lld\n", sellAmount, buyAmount);
+	//std::printf("sellAmount %lld buyAmount %lld\n", sellAmount, buyAmount);
 
 	mRealizedSellAmount += sellAmount;
 	mRealizedBuyAmount += buyAmount;
@@ -108,18 +108,18 @@ OrderbookClearingTarget::clearOffer(AbstractLedgerTxn& ltx, const IOCOffer& offe
 
 SpeedexLiquidityPoolClearingStatus
 OrderbookClearingTarget::finishWithLiquidityPool(AbstractLedgerTxn& ltx, LiquidityPoolFrame& lpFrame) {
-	std::printf("mTotalClearTarget (double %lf) %lld\n", (double) mTotalClearTarget, (int64_t) mTotalClearTarget);
-	std::printf("mRealizedClearTarget (double %lf) %lld\n", (double) mRealizedClearTarget, (int64_t) mRealizedClearTarget);
+	//std::printf("mTotalClearTarget (double %lf) %lld\n", (double) mTotalClearTarget, (int64_t) mTotalClearTarget);
+	//std::printf("mRealizedClearTarget (double %lf) %lld\n", (double) mRealizedClearTarget, (int64_t) mRealizedClearTarget);
 
 
 	int128_t remainingToClear = mTotalClearTarget - mRealizedClearTarget;
 
-	std::printf("remainingToClear (double %lf) %lld\n", (double) remainingToClear, (int64_t) remainingToClear);
+	//std::printf("remainingToClear (double %lf) %lld\n", (double) remainingToClear, (int64_t) remainingToClear);
 
 	int64_t sellAmount = getSellAmount(remainingToClear);
 	int64_t buyAmount = getBuyAmount(remainingToClear);
 
-	std::printf("sellAmount %lld buyAmount %lld\n", sellAmount, buyAmount);
+	//std::printf("sellAmount %lld buyAmount %lld\n", sellAmount, buyAmount);
 
 	lpFrame.assertValidSellAmount(sellAmount, mSellPrice, mBuyPrice);
 

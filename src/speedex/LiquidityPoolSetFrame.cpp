@@ -36,13 +36,6 @@ LiquidityPoolSetFrame::LiquidityPoolSetFrame(std::vector<Asset> const& assets, A
 					throw std::runtime_error("overflow base frames!");
 				}
 
-				//LiquidityPoolFrame pool1(mBaseFrames.back(), pair1);
-				//mLiquidityPools.emplace(pair1, pool1);
-
-
-				//LiquidityPoolFrame pool2(mBaseFrames.back(), pair1);
-				//mLiquidityPools.emplace(pair2, pool2);
-
 				mLiquidityPools.emplace(std::piecewise_construct,
 					std::forward_as_tuple(pair1),
 					std::forward_as_tuple(mBaseFrames.back(), pair1));
@@ -62,11 +55,11 @@ LiquidityPoolSetFrame::demandQuery(std::map<Asset, uint64_t> const& prices, Supp
 	{
 		int128_t sellAmountTimesPrice = lpFrame.amountOfferedForSaleTimesSellPrice(prices.at(tradingPair.selling), prices.at(tradingPair.buying));
 
-		std::printf("lp sell %s buy %s: %lf %ld\n", 
-			assetToString(tradingPair.selling).c_str(),
-			assetToString(tradingPair.buying).c_str(),
-			(double) sellAmountTimesPrice,
-			(int64_t) sellAmountTimesPrice);
+		//std::printf("lp sell %s buy %s: %lf %ld\n", 
+		//	assetToString(tradingPair.selling).c_str(),
+		//	assetToString(tradingPair.buying).c_str(),
+		//	(double) sellAmountTimesPrice,
+		//	(int64_t) sellAmountTimesPrice);
 
 		supplyDemand.addSupplyDemand(tradingPair, sellAmountTimesPrice);
 	}

@@ -30,6 +30,12 @@ class AccountCommutativityRequirements {
 
 	std::optional<int64_t>& getRequirement(Asset const& asset);
 
+	bool mCheckAccountResult = false;
+	bool mCacheValid = false;
+
+	void setCachedAccountHasSufficientBalanceCheck(bool res);
+	void invalidateCachedCheck();
+
 
 public:
 

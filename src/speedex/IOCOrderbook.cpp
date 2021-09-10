@@ -2,6 +2,8 @@
 
 #include "ledger/LedgerTxn.h"
 
+#include "util/types.h"
+
 namespace stellar {
 
 IOCOrderbook::IOCOrderbook(AssetPair tradingPair) 
@@ -72,17 +74,19 @@ IOCOrderbook::commitChild(const IOCOrderbook& other) {
 }
 
 std::pair<std::vector<SpeedexOfferClearingStatus>, std::optional<SpeedexLiquidityPoolClearingStatus>>
-IOCOrderbook::clearOffers(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target, LiquidityPoolFrame& lpFrame) {
-
-
-	std::printf("starting clear offers\n");
+IOCOrderbook::clearOffers(AbstractLedgerTxn& ltx, OrderbookClearingTarget& target, LiquidityPoolFrame& lpFrame)
+{
 	throwIfCleared();
+
+	auto sellStr = assetToString(mTradingPair.selling);
+	auto buyStr = assetToString(mTradingPair.buying);
+
+	std::printf("clearing trade pair sell %s buy %s\n", sellStr.c_str(), buyStr.c_str());
 
 	std::vector<SpeedexOfferClearingStatus> out;
 
 	for (auto iter = mOffers.begin(); iter != mOffers.end(); iter++) {
 		if (!target.doneClearing()) {
-			std::printf("clearing an offer\n");
 			out.push_back(target.clearOffer(ltx, *iter));
 		} else
 		{
@@ -100,8 +104,6 @@ IOCOrderbook::clearOffers(AbstractLedgerTxn& ltx, OrderbookClearingTarget& targe
 		throw std::runtime_error("invalid trade amounts!");
 	}
 	mCleared = true;
-
-	std::printf("done clearing\n");
 
 	return {out, lpRes};
 }
