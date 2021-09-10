@@ -53,21 +53,8 @@ TxSetCommutativityRequirements::tryAddTransaction(TransactionFrameBasePtr tx, Ab
 
 	LedgerTxnHeader header = ltx.loadHeader();
 
-/*	if (!tx->isCommutativeTransaction()) {
-		std::printf("noncomm tx\n");
-		if (!canAddFee(header, ltx, tx->getFeeSourceID(), tx->getFeeBid())) {
-			return false;
-		}
-		addFee(tx->getFeeSourceID(), tx->getFeeBid());
-		return true;
-	}
-	std::printf("comm tx\n"); */
-
-	//TODO getCommutativitityReqs has got to include fees
-
 	auto reqs = tx->getCommutativityRequirements(ltx);
 	if (!reqs) {
-		std::printf("reqs fail\n");
 		return false;
 	}
 
@@ -76,23 +63,14 @@ TxSetCommutativityRequirements::tryAddTransaction(TransactionFrameBasePtr tx, Ab
 
 		for (auto& req : acctReqs.getRequiredAssets()) {
 			if (!req.second) {
-				std::printf("acctreq failed\n");
 				return false;
 			}
 			if (!prevAcctReqs.checkAvailableBalanceSufficesForNewRequirement(header, ltx, req.first, *req.second))
 			{
-				std::printf("insufficient balance\n");
 				return false;
 			}
 		}
 	}
-
-
-//	if (!canAddFee(header, ltx, tx->getFeeSourceID(), tx->getFeeBid())) {
-//		std::printf("fee fail\n");
-//		return false;
-//	}
-
 
 	for (auto const& [acct, acctReqs] : reqs -> getRequirements()) {
 		auto& prevAcctReqs = getRequirements(acct);
@@ -101,8 +79,6 @@ TxSetCommutativityRequirements::tryAddTransaction(TransactionFrameBasePtr tx, Ab
 			prevAcctReqs.addAssetRequirement(req.first, *req.second);
 		}
 	}
-
-//	addFee(tx->getFeeSourceID(), tx->getFeeBid());
 
 	return true;
 }
@@ -146,72 +122,48 @@ TxSetCommutativityRequirements::tryReplaceTransaction(TransactionFrameBasePtr ne
 	auto oldReqs = oldTx -> getCommutativityRequirements(ltx);
 
 	if (!newReqs) {
-		std::printf("no new reqs\n");
+		// newTx failed some validation check
 		return false;
 	}
 	if (!oldReqs) {
 		throw std::runtime_error("bad tx got into queue!");
 	}
 
-/*	auto newFeeBid = newTx -> getFeeBid();
-
-	if (newTx -> getFeeSourceID() == oldTx -> getFeeSourceID())
-	{
-		newFeeBid -= oldTx -> getFeeBid();
-	}
-	if (newFeeBid < 0) {
-		throw std::logic_error("replacement by fee should require an increase");
-	} */
-
 	LedgerTxnHeader header = ltx.loadHeader();
 
-	//if (newReqs)
-//	{
-	//	if (oldReqs)
-	//	{
-			for (auto const& [acct, oldAcctReqs] : oldReqs -> getRequirements())
-			{
-				for (auto const& [asset, amount] : oldAcctReqs.getRequiredAssets())
-				{
-					//oldAcctReqs should be always valid, so never nullopt
-					newReqs->addAssetRequirement(acct, asset, -*amount);
-				}
-			}
-	//	}
-		for (auto const& [acct, newAcctReqs] : newReqs -> getRequirements())
+	for (auto const& [acct, oldAcctReqs] : oldReqs -> getRequirements())
+	{
+		for (auto const& [asset, amount] : oldAcctReqs.getRequiredAssets())
 		{
-			auto& prevAcctReqs = getRequirements(acct);
-			for (auto const& [asset, amount] : newAcctReqs.getRequiredAssets()) {
-				if (!amount) {
-					std::printf("overflow\n");
-					return false;
-				}
-				if (!prevAcctReqs.checkAvailableBalanceSufficesForNewRequirement(header, ltx, asset, *amount)) {
-					std::printf("insufficient balance\n");
-					return false;
-				}
-			}
-
+			//oldAcctReqs should be always valid, so never nullopt
+			newReqs->addAssetRequirement(acct, asset, -*amount);
 		}
-	//}
+	}
 
-//	if (!canAddFee(header, ltx, newTx -> getFeeSourceID(), newFeeBid))
-//	{
-//		return false;
-//	}
-
-//	if (newReqs)
-//	{
-		for (auto const& [acct, newAcctReq] : newReqs->getRequirements())
-		{
-			auto& prevReqs = getRequirements(acct);
-			for (auto const& [asset, amount] : newAcctReq.getRequiredAssets()) {
-				prevReqs.addAssetRequirement(asset, amount);
+	for (auto const& [acct, newAcctReqs] : newReqs -> getRequirements())
+	{
+		auto& prevAcctReqs = getRequirements(acct);
+		for (auto const& [asset, amount] : newAcctReqs.getRequiredAssets()) {
+			if (!amount) {
+				// overflow on a requirement
+				return false;
+			}
+			if (!prevAcctReqs.checkAvailableBalanceSufficesForNewRequirement(header, ltx, asset, *amount)) {
+				// insufficient balance
+				return false;
 			}
 		}
-//	}
-//	addFee(newTx->getFeeSourceID(), newFeeBid);
-//
+
+	}
+
+	for (auto const& [acct, newAcctReq] : newReqs->getRequirements())
+	{
+		auto& prevReqs = getRequirements(acct);
+		for (auto const& [asset, amount] : newAcctReq.getRequiredAssets()) {
+			prevReqs.addAssetRequirement(asset, amount);
+		}
+	}
+
 	if (!(newTx -> getFeeSourceID() == oldTx -> getFeeSourceID()))
 	{
 		addFee(oldTx -> getFeeSourceID(), -oldTx -> getFeeBid());

@@ -147,12 +147,11 @@ AccountCommutativityRequirements::checkAvailableBalanceSufficesForNewRequirement
 
 	auto currentBalance = getAvailableBalance(header, ltx, mSourceAccount, asset);
 
-
 	if (!currentRequirement) {
 		return false;
 	}
 
-	std::printf("curBal %lld curReq %lld amount %lld", currentBalance, *currentRequirement, amount);
+	//std::printf("curBal %lld curReq %lld amount %lld", currentBalance, *currentRequirement, amount);
 
 	if (amount + *currentRequirement <= currentBalance) {
 		return true;
@@ -180,6 +179,7 @@ bool
 AccountCommutativityRequirements::checkAccountHasSufficientBalance(AbstractLedgerTxn& ltx, LedgerTxnHeader& header) {
 	if (mCacheValid)
 	{
+		std::printf("result cached: %d\n", mCheckAccountResult);
 		return mCheckAccountResult;
 	}
 
@@ -196,7 +196,10 @@ AccountCommutativityRequirements::checkAccountHasSufficientBalance(AbstractLedge
 			setCachedAccountHasSufficientBalanceCheck(false);
 			return false;
 		}
-		std::printf("requirement: %ld currentBalance %ld\n", *amount, getAvailableBalance(header, ltx, mSourceAccount, asset));
+		std::printf("Asset: %s Requirement: %ld Current Balance %ld\n", 
+			assetToString(asset).c_str(), 
+			*amount, 
+			getAvailableBalance(header, ltx, mSourceAccount, asset));
 
 		if (*amount > getAvailableBalance(header, ltx, mSourceAccount, asset)) {
 			setCachedAccountHasSufficientBalanceCheck(false);

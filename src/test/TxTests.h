@@ -234,6 +234,9 @@ Operation liquidityPoolDeposit(PoolID const& poolID, int64_t maxAmountA,
 Operation liquidityPoolWithdraw(PoolID const& poolID, int64_t amount,
                                 int64_t minAmountA, int64_t minAmountB);
 
+Operation createSpeedexIOCOffer(
+    Asset const& sell, Asset const& buy, Price const& minPrice, int64_t amount);
+
 Asset makeNativeAsset();
 Asset makeInvalidAsset();
 Asset makeAsset(SecretKey const& issuer, std::string const& code);

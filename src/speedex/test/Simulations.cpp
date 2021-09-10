@@ -1,6 +1,7 @@
 #include "lib/catch.hpp"
 
 #include "speedex/test/TatonnementTestUtils.h"
+#include "simulation/Simulation.h"
 
 
 
@@ -31,10 +32,19 @@ TEST_CASE("sim 2-asset orderbook against lp", "[speedexsim]")
 {
 
 	// Boilerplate setup
+    SIMULATION_CREATE_NODE(0);
 
-	Config cfg(getTestConfig());
+    Config cfg(getTestConfig(0, Config::TESTDB_DEFAULT));
+
+    cfg.MANUAL_CLOSE = false;
+    cfg.NODE_SEED = v0SecretKey;
+
+    cfg.QUORUM_SET.threshold = 1;
+    cfg.QUORUM_SET.validators.clear();
+    cfg.QUORUM_SET.validators.push_back(v0NodeID);
+
 	cfg.LEDGER_PROTOCOL_VERSION = 17;
-	cfg.TESTING_UPGRADE_MAX_TX_SET_SIZE = 100;
+	cfg.TESTING_UPGRADE_MAX_TX_SET_SIZE = 1000;
 
     VirtualClock clock;
     Application::pointer app = createTestApplication(clock, cfg);
@@ -45,12 +55,12 @@ TEST_CASE("sim 2-asset orderbook against lp", "[speedexsim]")
 
     auto baseTxFee = app -> getLedgerManager().getLastTxFee();
 
-    auto feedTx = [&](TransactionFramePtr& tx) {
+    auto feedTx = [&](TransactionFramePtr tx) {
         REQUIRE(app->getHerder().recvTransaction(tx) ==
                 TransactionQueue::AddResult::ADD_STATUS_PENDING);
     };
 
-    auto feedBadTx = [&](TransactionFramePtr& tx) {
+    auto feedBadTx = [&](TransactionFramePtr tx) {
         REQUIRE(app->getHerder().recvTransaction(tx) !=
                 TransactionQueue::AddResult::ADD_STATUS_PENDING);
     };
@@ -82,7 +92,7 @@ TEST_CASE("sim 2-asset orderbook against lp", "[speedexsim]")
     auto assetIssuer = getIssuanceLimitedAccount(root, "issuer", minBalance2);
 
     // Create trader accounts
-    auto trader1 = root.create("trader1", app -> getLedgerManager().getLastMinBalance(2) + 10 * baseTxFee);
+    auto trader1 = root.create("trader1", app -> getLedgerManager().getLastMinBalance(2) + 100 * baseTxFee);
     auto trader2 = root.create("trader2", app -> getLedgerManager().getLastMinBalance(2) + 10 * baseTxFee);
 
     auto assets = makeAssets(2, assetIssuer);
@@ -100,13 +110,51 @@ TEST_CASE("sim 2-asset orderbook against lp", "[speedexsim]")
     PoolID poolID;
     {
 	    LedgerTxn ltx(app->getLedgerTxnRoot());
-		poolID = createLiquidityPool(assets[0], assets[1], 1000, 10000, ltx);
+		poolID = createLiquidityPool(assets[0], assets[1], 10000, 100000, ltx);
 		setSpeedexAssets(ltx, assets);
 		ltx.commit();
 	}
 
+    VirtualTimer setupTimer(*app);
 
+	auto setup = [&](asio::error_code const& error) {
+        REQUIRE(!error);
 
+		// demo commutativity requirements
 
+		feedTx(
+			trader2.commutativeTx({payment(trader1, assets[0], 100)}));
+		feedTx(
+			trader2.commutativeTx({payment(trader1, assets[0], 500)}));
+		feedBadTx(
+			trader2.commutativeTx({payment(trader1, assets[0], 500)}));
+		feedTx(
+			trader2.commutativeTx({payment(trader1, assets[0], 400)}, trader2.getLastSequenceNumber()));
+		feedTx(
+			trader2.tx({payment(trader1, assets[0], 10000)}));
+		feedBadTx(
+			trader2.commutativeTx({payment(trader1, assets[1], 100)}));
 
+		// Cases not demonstrated:
+		// - Overflow
+		// - Dependence on multiple accounts
+		// - Fee bump replace
+
+		// create sell offers: sell 1 asset0 for ~10 asset1
+		// Sell offer at 9:1, 9.1:1, 9.2:1,...10.9:1, 11:1
+		int32_t denominator = 100;
+		for (int32_t numerator = 900; numerator <= 1100; numerator += 10) {
+			Price p;
+			p.n = numerator;
+			p.d = denominator;
+			feedTx(
+				trader1.commutativeTx(
+					{createSpeedexIOCOffer(assets[0], assets[1], p, 100)}));
+		}
+	};
+
+	setupTimer.expires_from_now(std::chrono::seconds(0));
+    setupTimer.async_wait(setup);
+
+	waitForExternalize();
 }

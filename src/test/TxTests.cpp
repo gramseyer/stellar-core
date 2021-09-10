@@ -1378,6 +1378,19 @@ liquidityPoolWithdraw(PoolID const& poolID, int64_t amount, int64_t minAmountA,
     return op;
 }
 
+Operation createSpeedexIOCOffer(
+    Asset const& sell, Asset const& buy, Price const& minPrice, int64_t amount)
+{
+    Operation op;
+    op.body.type(CREATE_SPEEDEX_IOC_OFFER);
+    op.body.createSpeedexIOCOfferOp().sellAsset = sell;
+    op.body.createSpeedexIOCOfferOp().buyAsset = buy;
+    op.body.createSpeedexIOCOfferOp().minPrice = minPrice;
+    op.body.createSpeedexIOCOfferOp().sellAmount = amount;
+    return op;
+}
+
+
 OperationFrame const&
 getFirstOperationFrame(TransactionFrame const& tx)
 {

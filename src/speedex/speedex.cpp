@@ -17,7 +17,7 @@ SpeedexResults
 runSpeedex(AbstractLedgerTxn& ltx)
 {
 
-    bool printDiagnostics = false;
+    bool printDiagnostics = true;
     auto& speedexOrderbooks = ltx.getSpeedexIOCOffers();
     speedexOrderbooks.sealBatch();
 

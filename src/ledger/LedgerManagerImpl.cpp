@@ -645,12 +645,13 @@ LedgerManagerImpl::closeLedger(LedgerCloseData const& ledgerData)
     prefetchTxSourceIds(commutativeTxs);
     prefetchTxSourceIds(noncommutativeTxs);
     auto baseFee = txSet -> getBaseFee(header.current());
+    int historyIndex = 0;
     processFeesSeqNums(commutativeTxs, ltx, baseFee,
-                       ledgerCloseMeta);
+                       ledgerCloseMeta, historyIndex);
     //header is no longer valid -- the ltx.commit inside processFeesSeqNums invalidates it.
 
     processFeesSeqNums(noncommutativeTxs, ltx, baseFee,
-                       ledgerCloseMeta);
+                       ledgerCloseMeta, historyIndex);
 
     TransactionResultSet txResultSet;
     auto txs_size = commutativeTxs.size() + noncommutativeTxs.size();
@@ -994,12 +995,11 @@ LedgerManagerImpl::advanceLedgerPointers(LedgerHeader const& header,
 void
 LedgerManagerImpl::processFeesSeqNums(
     std::vector<TransactionFrameBasePtr>& txs, AbstractLedgerTxn& ltxOuter,
-    int64_t baseFee, std::unique_ptr<LedgerCloseMeta> const& ledgerCloseMeta)
+    int64_t baseFee, std::unique_ptr<LedgerCloseMeta> const& ledgerCloseMeta, int& historyIndex)
 {
     ZoneScoped;
     CLOG_DEBUG(Ledger, "processing fees and sequence numbers with base fee {}",
                baseFee);
-    int index = 0;
     try
     {
         LedgerTxn ltx(ltxOuter);
@@ -1021,11 +1021,11 @@ LedgerManagerImpl::processFeesSeqNums(
             // Also note: for historical reasons the history tables number
             // txs counting from 1, not 0. We preserve this for the time being
             // in case anyone depends on it.
-            ++index;
+            ++historyIndex;
             if (mApp.getConfig().MODE_STORES_HISTORY_MISC)
             {
                 storeTransactionFee(mApp.getDatabase(), ledgerSeq, tx, changes,
-                                    index);
+                                    historyIndex);
             }
             ltxTx.commit();
         }

@@ -119,6 +119,7 @@ CreateSpeedexIOCOfferOpFrame::doApply(AbstractLedgerTxn& ltx)
 bool 
 CreateSpeedexIOCOfferOpFrame::doCheckValid(uint32_t ledgerVersion)
 {
+	std::printf("CreateSpeedexIOCOfferOpFrame::doCheckValid\n");
 	return checkMalformed();
 }
 
