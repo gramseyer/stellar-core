@@ -801,14 +801,12 @@ TransactionFrame::checkValid(AbstractLedgerTxn& ltxOuter,
         commonValid(signatureChecker, ltx, current, false, chargeFee,
                     lowerBoundCloseTimeOffset,
                     upperBoundCloseTimeOffset) == ValidationType::kMaybeValid;
-    std::printf("commonValid res %d\n", res);
     if (res)
     {
         for (auto& op : mOperations)
         {
             if (!op->checkValid(signatureChecker, ltx, false))
             {
-                std::printf("op failed\n");
                 // it's OK to just fast fail here and not try to call
                 // checkValid on all operations as the resulting object
                 // is only used by applications

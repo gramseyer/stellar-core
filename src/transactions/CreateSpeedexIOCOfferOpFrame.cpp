@@ -84,42 +84,12 @@ CreateSpeedexIOCOfferOpFrame::doApply(AbstractLedgerTxn& ltx)
 	};
 
 	ltx.addSpeedexIOCOffer(tradingPair, offer);
-
-/*
-	auto sourceAccount = loadAccount(ltx, getSourceID());
-
-	if (!sourceAccount) {
-		throw std::runtime_error("commutative preconditions check should have blocked op from nonexistent account");
-	}
-
-	auto header = ltx.loadHeader();
-
-	auto sellAsset = mCreateSpeedexIOCOffer.sellAsset;
-	if (sellAsset.type() == ASSET_TYPE_NATIVE) {
-		auto ok = addBalance(header, sourceAccount, -amount);
-		if (!ok) {
-			throw std::runtime_error("commutative preconditions check should have blocked op with insufficent balance");
-		}
-	} else {
-        auto sourceLine = loadTrustLine(ltx, getSourceID(), sellAsset);
-
-        if (!sourceLine)
-        {
-            throw std::runtime_error("commutative preconditions should block nonexistent trustline");
-        }
-
-        if (!sourceLine.addBalance(header, -amount))
-        {
-            throw std::runtime_error("commutative preconditions should block insufficent trustline balance");
-        }
-	} */
 	
 	return true;
 }
 bool 
 CreateSpeedexIOCOfferOpFrame::doCheckValid(uint32_t ledgerVersion)
 {
-	std::printf("CreateSpeedexIOCOfferOpFrame::doCheckValid\n");
 	return checkMalformed();
 }
 

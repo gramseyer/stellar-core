@@ -259,7 +259,6 @@ OperationFrame::checkValid(SignatureChecker& signatureChecker,
     }
 
     resetResultSuccess();
-    std::printf("starting doCheckValid\n");
 
     return doCheckValid(ledgerVersion);
 }

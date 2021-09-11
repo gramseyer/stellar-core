@@ -50,11 +50,9 @@ IOCOrderbookManager::getOrCreateOrderbook(AssetPair const& assetPair) {
 
 	auto iter = mOrderbooks.find(assetPair);
 	if (iter == mOrderbooks.end()) {
-		std::printf("creating an orderbook\n");
 		iter = mOrderbooks.emplace(assetPair, assetPair).first;
 	}
 	return iter -> second;
-	//return (mOrderbooks.emplace(assetPair, assetPair).first->second);
 }
 
 size_t

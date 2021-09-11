@@ -3364,7 +3364,6 @@ LedgerTxnRoot::Impl::loadSnapshotEntry(LedgerKey const& key) const {
     {
         std::string zoneTxt("hit");
         ZoneText(zoneTxt.c_str(), zoneTxt.size());
-        std::printf("getting from cache\n");
         return getFromSnapshotCache(key);
     }
     else

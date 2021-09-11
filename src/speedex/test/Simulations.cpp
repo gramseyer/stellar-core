@@ -21,12 +21,8 @@
 #include "ledger/LedgerTxn.h"
 #include "ledger/TrustLineWrapper.h"
 
-
 using namespace stellar;
 using namespace stellar::txtest;
-
-
-
 
 TEST_CASE("sim 2-asset orderbook against lp", "[speedexsim]")
 {

@@ -404,6 +404,8 @@ TxSetFrame::checkOrTrim(Application& app,
 
     auto header = ltx.loadHeader();
 
+    std::printf("Begin TxSetFrame validity checks\n");
+
     for (auto& [_, accountTxs] : accountTxMap)
     {
         auto iter = accountTxs.begin();

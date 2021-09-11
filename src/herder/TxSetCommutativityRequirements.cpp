@@ -90,19 +90,16 @@ TxSetCommutativityRequirements::validateAndAddTransaction(TransactionFrameBasePt
 
 	auto reqs = tx->getCommutativityRequirements(ltx);
 
-	if (tx -> isCommutativeTransaction() && (!reqs)) {
+	if (!reqs) {
 		return false;
 	}
 
-	if (tx -> isCommutativeTransaction()) {
-		for (auto const& [acct, acctReqs] : reqs -> getRequirements()) {
-			auto& prevAcctReqs = getRequirements(acct);
-			for (auto const& req : acctReqs.getRequiredAssets()) {
-				prevAcctReqs.addAssetRequirement(req.first, req.second);
-			}
+	for (auto const& [acct, acctReqs] : reqs -> getRequirements()) {
+		auto& prevAcctReqs = getRequirements(acct);
+		for (auto const& req : acctReqs.getRequiredAssets()) {
+			prevAcctReqs.addAssetRequirement(req.first, req.second);
 		}
 	}
-	addFee(tx->getFeeSourceID(), tx->getFeeBid());
 
 	return true;
 }
@@ -131,6 +128,7 @@ TxSetCommutativityRequirements::tryReplaceTransaction(TransactionFrameBasePtr ne
 
 	LedgerTxnHeader header = ltx.loadHeader();
 
+	// newreqs includes negative oldReqs, which includes the old fee requirement
 	for (auto const& [acct, oldAcctReqs] : oldReqs -> getRequirements())
 	{
 		for (auto const& [asset, amount] : oldAcctReqs.getRequiredAssets())
@@ -164,10 +162,10 @@ TxSetCommutativityRequirements::tryReplaceTransaction(TransactionFrameBasePtr ne
 		}
 	}
 
-	if (!(newTx -> getFeeSourceID() == oldTx -> getFeeSourceID()))
-	{
-		addFee(oldTx -> getFeeSourceID(), -oldTx -> getFeeBid());
-	}
+	//if (!(newTx -> getFeeSourceID() == oldTx -> getFeeSourceID()))
+	//{
+	//	addFee(oldTx -> getFeeSourceID(), -oldTx -> getFeeBid());
+	//}
 	return true;
 }
 
