@@ -193,4 +193,12 @@ TxSetCommutativityRequirements::checkAccountHasSufficientBalance(AccountID accou
 	return getRequirements(account).checkAccountHasSufficientBalance(ltx, header);
 }
 
+#ifdef BUILD_TESTS
+std::optional<int64_t> 
+TxSetCommutativityRequirements::getReq(AccountID account, Asset asset)
+{
+	return getRequirements(account).getRequirement(asset);
+}
+#endif
+
 } /* stellar */

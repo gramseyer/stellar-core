@@ -8,6 +8,7 @@
 #include "util/UnorderedMap.h"
 #include "herder/AccountCommutativityRequirements.h"
 #include "util/XDROperators.h"
+#include <optional>
 
 
 namespace stellar {
@@ -40,6 +41,10 @@ public:
 	bool tryCleanAccountEntry(AccountID account);
 
 	bool checkAccountHasSufficientBalance(AccountID account, AbstractLedgerTxn& ltx, LedgerTxnHeader& header);
+
+#ifdef BUILD_TESTS
+	std::optional<int64_t> getReq(AccountID account, Asset asset);
+#endif
 
 
 };

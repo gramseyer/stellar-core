@@ -28,13 +28,17 @@ class AccountCommutativityRequirements {
 	bool checkCanAddAssetRequirement(
 		AbstractLedgerTxn& ltx, Asset const& asset, int64_t amount);
 
-	std::optional<int64_t>& getRequirement(Asset const& asset);
 
 	bool mCheckAccountResult = false;
 	bool mCacheValid = false;
 
 	void setCachedAccountHasSufficientBalanceCheck(bool res);
 	void invalidateCachedCheck();
+
+#ifdef BUILD_TESTS
+public:
+#endif
+	std::optional<int64_t>& getRequirement(Asset const& asset);
 
 
 public:

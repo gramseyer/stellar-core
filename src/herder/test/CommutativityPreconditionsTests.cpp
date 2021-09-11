@@ -20,6 +20,60 @@
 using namespace stellar;
 using namespace stellar::txtest;
 
+TEST_CASE("fee calculation test", "[txset][commutativity]")
+{
+    TxSetCommutativityRequirements reqs;
+
+    Config cfg(getTestConfig());
+    cfg.LEDGER_PROTOCOL_VERSION = 17;
+    cfg.TESTING_UPGRADE_MAX_TX_SET_SIZE = 100;
+
+    VirtualClock clock;
+    Application::pointer app = createTestApplication(clock, cfg);
+
+    auto root = TestAccount::createRoot(*app);
+    const int64_t minBalance0 = app->getLedgerManager().getLastMinBalance(0);
+    auto baseTxFee = app -> getLedgerManager().getLastTxFee();
+
+    auto paymentSource = root.create("src", 10000 + minBalance0);
+
+    auto xlm = getNativeAsset();
+
+    SECTION("comm txs")
+    {
+
+        auto tx = paymentSource.commutativeTx({payment(root, xlm, 1)});
+
+        LedgerTxn ltx(app -> getLedgerTxnRoot());
+        auto header = ltx.loadHeader();
+        tx -> resetResults(header.current(), baseTxFee, false);
+
+        REQUIRE(reqs.validateAndAddTransaction(
+            tx,
+            ltx));
+
+        REQUIRE(reqs.getReq(paymentSource.getPublicKey(), xlm));
+        REQUIRE(*reqs.getReq(paymentSource.getPublicKey(), xlm) == baseTxFee + 1);
+    }
+    SECTION("noncomm")
+    {
+
+        auto tx = paymentSource.tx({payment(root, xlm, 1)});
+
+        LedgerTxn ltx(app -> getLedgerTxnRoot());
+        auto header = ltx.loadHeader();
+        tx -> resetResults(header.current(), baseTxFee, false);
+
+        REQUIRE(reqs.validateAndAddTransaction(
+            tx,
+            ltx));
+
+        REQUIRE(reqs.getReq(paymentSource.getPublicKey(), xlm));
+        REQUIRE(*reqs.getReq(paymentSource.getPublicKey(), xlm) == baseTxFee);
+    }
+
+}
+
 TEST_CASE("commutative payment tx set", "[txset][commutativity]")
 {
 	Config cfg(getTestConfig());
