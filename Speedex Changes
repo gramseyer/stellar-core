@@ -206,6 +206,8 @@ Errata:
             Likely any value in [50, 90] is ok. 
     };
 
+    Hidden parameter : kMinStepSize = 1 << (mStepSizeRadix + 1).  Set to be sufficiently large so that step_size * mStepUp >> mStepRadix > step_size.
+
     If one were to run several copies of Tatonnement in parallel (and take the best result), the only parameters worth varying
     are mStepRadix and mSmoothMult.
 
