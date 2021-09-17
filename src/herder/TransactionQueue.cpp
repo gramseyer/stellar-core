@@ -394,6 +394,7 @@ TransactionQueue::dropTransactions(AccountStates::iterator stateIter,
     for (auto iter = begin; iter != end; ++iter)
     {
         prepareDropTransaction(stateIter->second, *iter);
+        mCommutativityRequirements.removeTransaction((*iter).mTx);
     }
 
     // Actually erase the transactions to be dropped.
@@ -407,10 +408,6 @@ TransactionQueue::dropTransactions(AccountStates::iterator stateIter,
         {
             mAccountStates.erase(stateIter);
         }
-       // if (stateIter->second.mTotalFees == 0)
-       // {
-       //     mAccountStates.erase(stateIter);
-       // }
         else
         {
             stateIter->second.mAge = 0;
@@ -634,6 +631,7 @@ TransactionQueue::shift()
                 //     !it->second.mTransactions.empty()
                 // otherwise we couldn't have reached this line.
                 prepareDropTransaction(it->second, toBan);
+                mCommutativityRequirements.removeTransaction(toBan.mTx);
                 bannedFront.insert(toBan.mTx->getFullHash());
             }
             mBannedTransactionsCounter.inc(
@@ -644,10 +642,6 @@ TransactionQueue::shift()
             {
                 mAccountStates.erase(it);
             }
-            //if (it->second.mTotalFees == 0)
-            //{
-            //    it = mAccountStates.erase(it);
-            //}
             else
             {
                 it->second.mAge = 0;

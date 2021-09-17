@@ -152,10 +152,17 @@ PaymentOpFrame::doAddCommutativityRequirements(AbstractLedgerTxn& ltx,
         return false;
     }
 
-    reqs.addAssetRequirement(getSourceID(), mPayment.asset, mPayment.amount);
+    doAddCommutativityRequirementsUnconditional(reqs);
 
     return true;
 }
+
+void
+PaymentOpFrame::doAddCommutativityRequirementsUnconditional(TransactionCommutativityRequirements& reqs) const
+{
+    reqs.addAssetRequirement(getSourceID(), mPayment.asset, mPayment.amount);
+}
+
 
 void
 PaymentOpFrame::insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const

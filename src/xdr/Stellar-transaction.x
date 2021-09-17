@@ -683,6 +683,12 @@ struct CommutativeTransaction
     Memo memo;
 
     Operation operations<MAX_OPS_PER_TX>;
+
+    union switch(int v)
+    {
+    case 0:
+        void;
+    } ext;
 };
 
 struct CommutativeTransactionEnvelope

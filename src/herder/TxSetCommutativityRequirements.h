@@ -37,6 +37,8 @@ public:
 
 	bool tryReplaceTransaction(TransactionFrameBasePtr newTx, TransactionFrameBasePtr oldTx, AbstractLedgerTxn& ltx);
 
+	void removeTransaction(TransactionFrameBasePtr tx);
+
 	// returns true if account has been removed from the map
 	bool tryCleanAccountEntry(AccountID account);
 

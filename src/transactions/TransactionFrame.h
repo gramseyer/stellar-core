@@ -183,6 +183,12 @@ class TransactionFrame : public TransactionFrameBase
     std::optional<TransactionCommutativityRequirements>
     getCommutativityRequirements(AbstractLedgerTxn& ltx) const override;
 
+    TransactionCommutativityRequirements
+    getCommutativityRequirementsUnconditional() const override;
+
+    TransactionCommutativityRequirements
+    getCommutativityRequirementsUnconditionalNoFees() const override;
+
     std::optional<TransactionCommutativityRequirements>
     getCommutativityRequirementsNoFees(AbstractLedgerTxn& ltx) const override;
 

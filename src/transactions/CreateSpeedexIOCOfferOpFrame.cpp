@@ -110,9 +110,16 @@ CreateSpeedexIOCOfferOpFrame::doAddCommutativityRequirements(AbstractLedgerTxn& 
 		return false;
 	}
 
-	reqs.addAssetRequirement(getSourceID(), mCreateSpeedexIOCOffer.sellAsset, mCreateSpeedexIOCOffer.sellAmount);
+	doAddCommutativityRequirementsUnconditional(reqs);
     return true;
 }
+
+void
+CreateSpeedexIOCOfferOpFrame::doAddCommutativityRequirementsUnconditional(TransactionCommutativityRequirements& reqs) const
+{
+	reqs.addAssetRequirement(getSourceID(), mCreateSpeedexIOCOffer.sellAsset, mCreateSpeedexIOCOffer.sellAmount);
+}
+
 
 void
 CreateSpeedexIOCOfferOpFrame::insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const {

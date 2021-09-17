@@ -28,7 +28,8 @@ class PaymentOpFrame : public OperationFrame
     bool doCheckValid(uint32_t ledgerVersion) override;
 
     bool doAddCommutativityRequirements(AbstractLedgerTxn& ltx, TransactionCommutativityRequirements& reqs) override;
-    
+    void doAddCommutativityRequirementsUnconditional(TransactionCommutativityRequirements& reqs) const override;
+
     void
     insertLedgerKeysToPrefetch(UnorderedSet<LedgerKey>& keys) const override;
 

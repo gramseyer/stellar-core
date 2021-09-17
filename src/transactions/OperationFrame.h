@@ -46,6 +46,7 @@ class OperationFrame
     virtual bool doApply(AbstractLedgerTxn& ltx) = 0;
 
     virtual bool doAddCommutativityRequirements(AbstractLedgerTxn& ltx, TransactionCommutativityRequirements& reqs);
+    virtual void doAddCommutativityRequirementsUnconditional(TransactionCommutativityRequirements& reqs) const;
 
     // returns the threshold this operation requires
     virtual ThresholdLevel getThresholdLevel() const;
@@ -88,6 +89,7 @@ class OperationFrame
     bool apply(SignatureChecker& signatureChecker, AbstractLedgerTxn& ltx);
 
     bool addCommutativityRequirements(AbstractLedgerTxn& ltx, TransactionCommutativityRequirements& reqs);
+    void addCommutativityRequirementsUnconditional(TransactionCommutativityRequirements& reqs) const;
 
     Operation const&
     getOperation() const

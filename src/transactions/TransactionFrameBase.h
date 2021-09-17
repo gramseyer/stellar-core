@@ -59,8 +59,14 @@ class TransactionFrameBase
     virtual std::optional<TransactionCommutativityRequirements>
     getCommutativityRequirements(AbstractLedgerTxn& ltx) const = 0;
 
+    virtual TransactionCommutativityRequirements
+    getCommutativityRequirementsUnconditional() const = 0;
+
     virtual std::optional<TransactionCommutativityRequirements>
     getCommutativityRequirementsNoFees(AbstractLedgerTxn& ltx) const = 0;
+
+    virtual TransactionCommutativityRequirements
+    getCommutativityRequirementsUnconditionalNoFees() const = 0;
 
     virtual UnorderedSet<AccountID>
     getRelevantAccounts() const = 0;

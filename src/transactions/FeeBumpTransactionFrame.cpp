@@ -378,6 +378,12 @@ FeeBumpTransactionFrame::getCommutativityRequirementsNoFees(AbstractLedgerTxn& l
     return mInnerTx -> getCommutativityRequirementsNoFees(ltx);
 }
 
+TransactionCommutativityRequirements
+FeeBumpTransactionFrame::getCommutativityRequirementsUnconditionalNoFees() const
+{
+    return mInnerTx -> getCommutativityRequirementsUnconditionalNoFees();
+}
+
 std::optional<TransactionCommutativityRequirements>
 FeeBumpTransactionFrame::getCommutativityRequirements(AbstractLedgerTxn& ltx) const
 {
@@ -389,6 +395,14 @@ FeeBumpTransactionFrame::getCommutativityRequirements(AbstractLedgerTxn& ltx) co
 
     addFeeCommutativityRequirement(*reqs);
 
+    return reqs;
+}
+
+TransactionCommutativityRequirements
+FeeBumpTransactionFrame::getCommutativityRequirementsUnconditional() const
+{
+    auto reqs = getCommutativityRequirementsUnconditionalNoFees();
+    addFeeCommutativityRequirement(reqs);
     return reqs;
 }
 

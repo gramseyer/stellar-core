@@ -146,6 +146,17 @@ OperationFrame::apply(SignatureChecker& signatureChecker,
     return res;
 }
 
+void
+OperationFrame::doAddCommutativityRequirementsUnconditional(TransactionCommutativityRequirements& reqs) const
+{
+
+}
+
+void
+OperationFrame::addCommutativityRequirementsUnconditional(TransactionCommutativityRequirements& reqs) const {
+    doAddCommutativityRequirementsUnconditional(reqs);
+}
+
 bool
 OperationFrame::doAddCommutativityRequirements(AbstractLedgerTxn& ltx,
                                                TransactionCommutativityRequirements& reqs)
@@ -156,10 +167,10 @@ OperationFrame::doAddCommutativityRequirements(AbstractLedgerTxn& ltx,
 bool
 OperationFrame::addCommutativityRequirements(AbstractLedgerTxn& ltx,
                                              TransactionCommutativityRequirements& reqs) {
-    ZoneScoped;
-    //TODO logging
     return doAddCommutativityRequirements(ltx, reqs);
 }
+
+
 
 ThresholdLevel
 OperationFrame::getThresholdLevel() const

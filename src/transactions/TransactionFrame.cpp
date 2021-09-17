@@ -222,6 +222,28 @@ TransactionFrame::getCommutativityRequirements(AbstractLedgerTxn& ltx) const
     return reqs;
 }
 
+TransactionCommutativityRequirements
+TransactionFrame::getCommutativityRequirementsUnconditional() const
+{
+    auto reqs = getCommutativityRequirementsUnconditionalNoFees();
+    addFeeCommutativityRequirement(reqs);
+    return reqs;
+}
+
+TransactionCommutativityRequirements
+TransactionFrame::getCommutativityRequirementsUnconditionalNoFees() const
+{
+    TransactionCommutativityRequirements reqs;
+    if (isCommutativeTransaction())
+    {
+        for (auto const& op : getOperations())
+        {
+            op -> addCommutativityRequirementsUnconditional(reqs);
+        }
+    }
+    return reqs;
+}
+
 UnorderedSet<AccountID>
 TransactionFrame::getRelevantAccounts() const 
 {

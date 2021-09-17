@@ -371,6 +371,7 @@ TxSetFrame::checkOrTrim(Application& app,
                 auto res = reqs.validateAndAddTransaction(tx, ltx);
 
 
+                //Comparison:
                 /*int64_t& accFee = accountFeeMap[tx->getFeeSourceID()];
                 if (INT64_MAX - accFee < tx->getFeeBid())
                 {

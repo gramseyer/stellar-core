@@ -88,8 +88,8 @@ TEST_CASE("sim 2-asset orderbook against lp", "[speedexsim]")
     auto assetIssuer = getIssuanceLimitedAccount(root, "issuer", minBalance2);
 
     // Create trader accounts
-    auto trader1 = root.create("trader1", app -> getLedgerManager().getLastMinBalance(2) + 100 * baseTxFee);
-    auto trader2 = root.create("trader2", app -> getLedgerManager().getLastMinBalance(2) + 10 * baseTxFee);
+    auto trader1 = root.create("trader1", app -> getLedgerManager().getLastMinBalance(2) + 102 * baseTxFee);
+    auto trader2 = root.create("trader2", app -> getLedgerManager().getLastMinBalance(2) + 12 * baseTxFee);
 
     auto assets = makeAssets(2, assetIssuer);
 

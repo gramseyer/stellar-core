@@ -52,12 +52,12 @@ TatonnementOracle::computePrices(TatonnementControlParams const& params, std::ma
 
 		if (printFrequency > 0 && controlParams.getRoundNumber() % printFrequency == 0)
 		{
-			std::printf("step size: %llu round number: %lu\n", stepSize, controlParams.getRoundNumber());
+			std::printf("TATONNEMENT STEP: step size: %llu round number: %lu\n", stepSize, controlParams.getRoundNumber());
 			for (auto const& [asset, price] : prices)
 			{
 				int128_t demand = baselineDemand.getDelta(asset);
 				auto str = assetToString(asset);
-				std::printf("%s\t%15llu\t%lf\n", str.c_str(), price, (double)demand);
+				std::printf("TATONNEMENT: %s\t%15llu\t%lf\n", str.c_str(), price, (double)demand);
 			}
 		}
 	}

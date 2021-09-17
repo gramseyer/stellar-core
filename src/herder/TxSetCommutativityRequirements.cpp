@@ -104,6 +104,26 @@ TxSetCommutativityRequirements::validateAndAddTransaction(TransactionFrameBasePt
 	return true;
 }
 
+
+void 
+TxSetCommutativityRequirements::removeTransaction(TransactionFrameBasePtr tx)
+{
+	auto reqs = tx -> getCommutativityRequirementsUnconditional();
+
+	for (auto const& [acct, acctReqs] : reqs.getRequirements()) {
+		auto& prevAcctReqs = getRequirements(acct);
+		for (auto const& req : acctReqs.getRequiredAssets())
+		{
+			if (!req.second)
+			{
+				throw std::runtime_error("invalid tx got into txset!");
+			}
+			int64_t amount = *req.second;
+			prevAcctReqs.addAssetRequirement(req.first, -amount);
+		}
+	}
+}
+
 bool 
 TxSetCommutativityRequirements::tryReplaceTransaction(TransactionFrameBasePtr newTx, 
 													  TransactionFrameBasePtr oldTx, 
