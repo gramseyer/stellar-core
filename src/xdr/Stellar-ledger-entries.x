@@ -122,12 +122,15 @@ enum AccountFlags
     // Trustlines are created with clawback enabled set to "true",
     // and claimable balances created from those trustlines are created
     // with clawback enabled set to "true"
-    AUTH_CLAWBACK_ENABLED_FLAG = 0x8
+    AUTH_CLAWBACK_ENABLED_FLAG = 0x8,
+    // All assets issued from this account will be issuance-limited
+    AUTH_NEW_ASSET_ISSUANCE_LIMITED = 0x10
 };
 
 // mask for all valid flags
 const MASK_ACCOUNT_FLAGS = 0x7;
 const MASK_ACCOUNT_FLAGS_V17 = 0xF;
+const MASK_ACCOUNT_FLAGS_VXX = 0x1F;
 
 // maximum number of signers
 const MAX_SIGNERS = 20;
@@ -576,7 +579,7 @@ case LIQUIDITY_POOL:
     {
         PoolID liquidityPoolID;
     } liquidityPool;
-    
+
 case ASSET_ISSUANCE:
     struct
     {
