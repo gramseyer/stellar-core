@@ -87,6 +87,7 @@ IOCOrderbook::clearOffers(AbstractLedgerTxn& ltx, OrderbookClearingTarget& targe
 
 	for (auto iter = mOffers.begin(); iter != mOffers.end(); iter++) {
 		if (!target.doneClearing()) {
+			// TODO adjust here if prioritizing full execution over trading at all
 			out.push_back(target.clearOffer(ltx, *iter));
 		} else
 		{

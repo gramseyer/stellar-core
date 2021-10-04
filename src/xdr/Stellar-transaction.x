@@ -711,7 +711,6 @@ struct FeeBumpTransaction
     case ENVELOPE_TYPE_TX_COMMUTATIVE:
         CommutativeTransactionEnvelope commutativeTx;
     }
-    //TODO commutative tx here
     innerTx;
     union switch (int v)
     {
