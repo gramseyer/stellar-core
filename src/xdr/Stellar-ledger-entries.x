@@ -97,7 +97,8 @@ enum LedgerEntryType
     OFFER = 2,
     DATA = 3,
     CLAIMABLE_BALANCE = 4,
-    LIQUIDITY_POOL = 5
+    LIQUIDITY_POOL = 5,
+    ASSET_ISSUANCE = 6
 };
 
 struct Signer
@@ -194,6 +195,22 @@ struct AccountEntry
         void;
     case 1:
         AccountEntryExtensionV1 v1;
+    }
+    ext;
+};
+
+/* AssetIssuanceEntry
+    Logs the amount of an asset issued in total on the Stellar network.
+*/
+struct AssetIssuanceEntry
+{
+    Asset asset;
+    int64 amount;
+
+    union switch(int v)
+    {
+    case 0:
+        void;
     }
     ext;
 };
@@ -503,6 +520,8 @@ struct LedgerEntry
         ClaimableBalanceEntry claimableBalance;
     case LIQUIDITY_POOL:
         LiquidityPoolEntry liquidityPool;
+    case ASSET_ISSUANCE:
+        AssetIssuanceEntry assetIssuance;
     }
     data;
 
@@ -557,6 +576,12 @@ case LIQUIDITY_POOL:
     {
         PoolID liquidityPoolID;
     } liquidityPool;
+    
+case ASSET_ISSUANCE:
+    struct
+    {
+        Asset asset;
+    } assetIssuance;
 };
 
 // list of all envelope types used in the application

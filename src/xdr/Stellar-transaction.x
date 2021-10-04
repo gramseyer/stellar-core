@@ -57,7 +57,8 @@ enum OperationType
     CLAWBACK_CLAIMABLE_BALANCE = 20,
     SET_TRUST_LINE_FLAGS = 21,
     LIQUIDITY_POOL_DEPOSIT = 22,
-    LIQUIDITY_POOL_WITHDRAW = 23
+    LIQUIDITY_POOL_WITHDRAW = 23,
+    ACTIVATE_ASSET_ISSUANCE_LIMIT = 24
 };
 
 /* CreateAccount
@@ -465,6 +466,17 @@ struct LiquidityPoolWithdrawOp
     int64 minAmountB;     // minimum amount of second asset to withdraw
 };
 
+/* Turn on asset issuance on an account
+
+    Threshold: med
+
+    Result: ActivateAssetIssuanceLimitResult
+*/
+struct ActivateAssetIssuanceLimitOp
+{
+    Asset asset;  
+};
+
 /* An operation is the lowest unit of work that a transaction does */
 struct Operation
 {
@@ -523,6 +535,8 @@ struct Operation
         LiquidityPoolDepositOp liquidityPoolDepositOp;
     case LIQUIDITY_POOL_WITHDRAW:
         LiquidityPoolWithdrawOp liquidityPoolWithdrawOp;
+    case ACTIVATE_ASSET_ISSUANCE_LIMIT:
+        ActivateAssetIssuanceLimitOp activateAssetIssuanceLimitOp;
     }
     body;
 };
@@ -1386,6 +1400,29 @@ default:
     void;
 };
 
+/******* ActivateAssetIssuanceLimit Result ********/
+
+enum ActivateAssetIssuanceLimitResultCode
+{
+    // codes considered as "success" for the operation
+    ACTIVATE_ASSET_ISSUANCE_LIMIT_SUCCESS = 0,
+
+    // codes considered as "failure" for the operation
+    ACTIVATE_ASSET_ISSUANCE_LIMIT_OVERISSUED = 1,      // too much asset already issued
+    ACTIVATE_ASSET_ISSUANCE_LIMIT_WRONG_ACCOUNT = 2,   // cannot activate issuance on different account
+    ACTIVATE_ASSET_ISSUANCE_LIMIT_LOW_RESERVE = 3,     // insufficient reserves
+    ACTIVATE_ASSET_ISSUANCE_LIMIT_ALREADY_LIMITED = 4  // asset issuance is already limited
+};
+
+union ActivateAssetIssuanceLimitResult switch (
+    ActivateAssetIssuanceLimitResultCode code)
+{
+case ACTIVATE_ASSET_ISSUANCE_LIMIT_SUCCESS:
+    void;
+default:
+    void;
+};
+
 /* High level Operation Result */
 enum OperationResultCode
 {
@@ -1452,6 +1489,8 @@ case opINNER:
         LiquidityPoolDepositResult liquidityPoolDepositResult;
     case LIQUIDITY_POOL_WITHDRAW:
         LiquidityPoolWithdrawResult liquidityPoolWithdrawResult;
+    case ACTIVATE_ASSET_ISSUANCE_LIMIT:
+        ActivateAssetIssuanceLimitResult activateAssetIssuanceLimitResult;
     }
     tr;
 default:
