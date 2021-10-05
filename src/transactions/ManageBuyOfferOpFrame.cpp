@@ -31,9 +31,9 @@ ManageBuyOfferOpFrame::ManageBuyOfferOpFrame(Operation const& op,
 }
 
 bool
-ManageBuyOfferOpFrame::isVersionSupported(uint32_t protocolVersion) const
+ManageBuyOfferOpFrame::isOpSupported(LedgerHeader const& header) const
 {
-    return protocolVersion >= 11;
+    return header.ledgerVersion >= 11;
 }
 
 bool
@@ -81,13 +81,6 @@ ManageBuyOfferOpFrame::getExchangeParametersBeforeV10(int64_t& maxSheepSend,
                                                       int64_t& maxWheatReceive)
 {
     throw std::runtime_error("ManageBuyOffer used before protocol version 10");
-}
-
-bool
-ManageBuyOfferOpFrame::isResultSuccess()
-{
-    return mResult.tr().manageBuyOfferResult().code() ==
-           MANAGE_BUY_OFFER_SUCCESS;
 }
 
 ManageOfferSuccessResult&

@@ -424,7 +424,7 @@ class LedgerTxn::Impl
   public:
     // Constructor has the strong exception safety guarantee
     Impl(LedgerTxn& self, AbstractLedgerTxnParent& parent,
-         bool shouldUpdateLastModified);
+         bool shouldUpdateLastModified, TransactionMode mode);
 
     // addChild has the strong exception safety guarantee
     void addChild(AbstractLedgerTxn& child);
@@ -613,6 +613,8 @@ class LedgerTxn::Impl
     uint32_t prefetch(UnorderedSet<LedgerKey> const& keys);
 
     double getPrefetchHitRate() const;
+
+    void prepareNewObjects(size_t s);
 
     // hasSponsorshipEntry has the strong exception safety guarantee
     bool hasSponsorshipEntry() const;
@@ -848,7 +850,7 @@ class LedgerTxnRoot::Impl
     ~Impl();
 
     // addChild has the strong exception safety guarantee.
-    void addChild(AbstractLedgerTxn& child);
+    void addChild(AbstractLedgerTxn& child, TransactionMode mode);
 
     // commitChild has the strong exception safety guarantee.
     void commitChild(EntryIterator iter, LedgerTxnConsistency cons);
@@ -934,6 +936,8 @@ class LedgerTxnRoot::Impl
     uint32_t prefetch(UnorderedSet<LedgerKey> const& keys);
 
     double getPrefetchHitRate() const;
+
+    void prepareNewObjects(size_t s);
 
 #ifdef BEST_OFFER_DEBUGGING
     bool bestOfferDebuggingEnabled() const;

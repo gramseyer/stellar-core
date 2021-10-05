@@ -396,7 +396,8 @@ validateTxResults(TransactionFramePtr const& tx, Application& app,
 
 void
 checkLiquidityPool(Application& app, PoolID const& poolID, int64_t reserveA,
-                   int64_t reserveB, int64_t totalPoolShares)
+                   int64_t reserveB, int64_t totalPoolShares,
+                   int64_t poolSharesTrustLineCount)
 {
     LedgerTxn ltx(app.getLedgerTxnRoot());
     auto lp = loadLiquidityPool(ltx, poolID);
@@ -405,6 +406,7 @@ checkLiquidityPool(Application& app, PoolID const& poolID, int64_t reserveA,
     REQUIRE(cp.reserveA == reserveA);
     REQUIRE(cp.reserveB == reserveB);
     REQUIRE(cp.totalPoolShares == totalPoolShares);
+    REQUIRE(cp.poolSharesTrustLineCount == poolSharesTrustLineCount);
 }
 
 TxSetResultMeta
@@ -714,6 +716,7 @@ ChangeTrustAsset
 makeChangeTrustAssetPoolShare(Asset const& assetA, Asset const& assetB,
                               int32_t fee)
 {
+    REQUIRE(assetA < assetB);
     ChangeTrustAsset poolAsset;
     poolAsset.type(ASSET_TYPE_POOL_SHARE);
     poolAsset.liquidityPool().constantProduct().assetA = assetA;
@@ -1422,5 +1425,119 @@ transactionFrameFromOps(Hash const& networkID, TestAccount& source,
     return TransactionFrameBase::makeTransactionFromWire(
         networkID, envelopeFromOps(networkID, source, ops, opKeys));
 }
+
+LedgerUpgrade
+makeBaseReserveUpgrade(int baseReserve)
+{
+    auto result = LedgerUpgrade{LEDGER_UPGRADE_BASE_RESERVE};
+    result.newBaseReserve() = baseReserve;
+    return result;
+}
+
+UpgradeType
+toUpgradeType(LedgerUpgrade const& upgrade)
+{
+    auto v = xdr::xdr_to_opaque(upgrade);
+    auto result = UpgradeType{v.begin(), v.end()};
+    return result;
+}
+
+LedgerHeader
+executeUpgrades(Application& app, xdr::xvector<UpgradeType, 6> const& upgrades)
+{
+    auto& lm = app.getLedgerManager();
+    auto const& lcl = lm.getLastClosedLedgerHeader();
+    auto txSet = std::make_shared<TxSetFrame>(lcl.hash);
+
+    app.getHerder().externalizeValue(txSet, lcl.header.ledgerSeq + 1, 2,
+                                     upgrades);
+    return lm.getLastClosedLedgerHeader().header;
+};
+
+LedgerHeader
+executeUpgrade(Application& app, LedgerUpgrade const& lupgrade)
+{
+    return executeUpgrades(app, {toUpgradeType(lupgrade)});
+};
+
+// trades is a vector of pairs, where the bool indicates if assetA or assetB is
+// sent in the payment, and the int64_t is the amount
+void
+depositTradeWithdrawTest(Application& app, TestAccount& root, int depositSize,
+                         std::vector<std::pair<bool, int64_t>> const& trades)
+{
+    struct Deposit
+    {
+        TestAccount acc;
+        int64_t numPoolShares;
+    };
+    std::vector<Deposit> deposits;
+
+    int64_t total = 0;
+
+    auto cur1 = makeAsset(root, "CUR1");
+    auto cur2 = makeAsset(root, "CUR2");
+    auto share12 =
+        makeChangeTrustAssetPoolShare(cur1, cur2, LIQUIDITY_POOL_FEE_V18);
+    auto pool12 = xdrSha256(share12.liquidityPool());
+
+    auto deposit = [&](int accNum, int size) {
+        auto acc = root.create(fmt::format("account{}", accNum),
+                               app.getLedgerManager().getLastMinBalance(10));
+        acc.changeTrust(cur1, INT64_MAX);
+        acc.changeTrust(cur2, INT64_MAX);
+        acc.changeTrust(share12, INT64_MAX);
+
+        root.pay(acc, cur1, size);
+        root.pay(acc, cur2, size);
+
+        acc.liquidityPoolDeposit(pool12, size, size, Price{1, INT32_MAX},
+                                 Price{INT32_MAX, 1});
+
+        total += size;
+
+        checkLiquidityPool(app, pool12, total, total, total, accNum + 1);
+
+        deposits.emplace_back(Deposit{acc, size});
+    };
+
+    // deposit
+    deposit(0, depositSize);
+    deposit(1, depositSize);
+
+    for (auto const& trade : trades)
+    {
+        auto const& sendAsset = trade.first ? cur1 : cur2;
+        auto const& recvAsset = trade.first ? cur2 : cur1;
+        root.pay(root, sendAsset, INT64_MAX, recvAsset, trade.second, {});
+    }
+
+    // withdraw in reverse order
+    for (auto rit = deposits.rbegin(); rit != deposits.rend(); ++rit)
+    {
+        auto& d = *rit;
+        d.acc.liquidityPoolWithdraw(pool12, d.numPoolShares, 0, 0);
+
+        total -= d.numPoolShares;
+    }
+
+    checkLiquidityPool(app, pool12, 0, 0, 0, 2);
+
+    // delete trustlines
+    int i = 2;
+    for (auto& deposit : deposits)
+    {
+        deposit.acc.changeTrust(share12, 0);
+
+        if (--i > 0)
+        {
+            checkLiquidityPool(app, pool12, 0, 0, 0, i);
+        }
+    }
+
+    LedgerTxn ltx(app.getLedgerTxnRoot());
+    REQUIRE(!loadLiquidityPool(ltx, pool12));
+}
+
 }
 }

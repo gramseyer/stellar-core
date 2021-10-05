@@ -15,19 +15,6 @@
 namespace stellar
 {
 
-static void
-setClaimableBalanceClawbackEnabled(ClaimableBalanceEntry& cb)
-{
-    if (cb.ext.v() != 0)
-    {
-        throw std::runtime_error(
-            "unexpected ClaimableBalanceEntry ext version");
-    }
-
-    cb.ext.v(1);
-    cb.ext.v1().flags = CLAIMABLE_BALANCE_CLAWBACK_ENABLED_FLAG;
-}
-
 static int64_t
 relativeToAbsolute(TimePoint closeTime, int64_t relative)
 {
@@ -145,10 +132,9 @@ CreateClaimableBalanceOpFrame::CreateClaimableBalanceOpFrame(
 }
 
 bool
-CreateClaimableBalanceOpFrame::isVersionSupported(
-    uint32_t protocolVersion) const
+CreateClaimableBalanceOpFrame::isOpSupported(LedgerHeader const& header) const
 {
-    return protocolVersion >= 14;
+    return header.ledgerVersion >= 14;
 }
 
 bool
@@ -311,12 +297,12 @@ CreateClaimableBalanceOpFrame::insertLedgerKeysToPrefetch(
 Hash
 CreateClaimableBalanceOpFrame::getBalanceID()
 {
-    OperationID operationID;
-    operationID.type(ENVELOPE_TYPE_OP_ID);
-    operationID.id().sourceAccount = mParentTx.getSourceID();
-    operationID.id().seqNum = mParentTx.getSeqNum();
-    operationID.id().opNum = mOpIndex;
+    HashIDPreimage hashPreimage;
+    hashPreimage.type(ENVELOPE_TYPE_OP_ID);
+    hashPreimage.operationID().sourceAccount = mParentTx.getSourceID();
+    hashPreimage.operationID().seqNum = mParentTx.getSeqNum();
+    hashPreimage.operationID().opNum = mOpIndex;
 
-    return xdrSha256(operationID);
+    return xdrSha256(hashPreimage);
 }
 }

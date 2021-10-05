@@ -3,6 +3,7 @@
 // of this distribution or at http://www.apache.org/licenses/LICENSE-2.0
 
 #include "OfferExchange.h"
+#include "crypto/SHA.h"
 #include "database/Database.h"
 #include "ledger/LedgerManager.h"
 #include "ledger/LedgerTxn.h"
@@ -15,6 +16,12 @@
 #include "util/GlobalChecks.h"
 #include "util/Logging.h"
 #include <Tracy.hpp>
+
+struct ExchangedQuantities
+{
+    int64_t sheepSend{0};
+    int64_t wheatReceived{0};
+};
 
 namespace stellar
 {
@@ -1237,29 +1244,96 @@ exchangeWithPool(int64_t reservesToPool, int64_t maxSendToPool, int64_t& toPool,
         throw std::runtime_error("Liquidity pool fee out of range");
     }
 
+    if (reservesToPool <= 0 || reservesFromPool <= 0)
+    {
+        // This should never happen, but the following code makes positivity
+        // assumptions about these values.
+        throw std::runtime_error("non-positive reserve in exchangeWithPool");
+    }
+
     switch (round)
     {
     case RoundingType::PATH_PAYMENT_STRICT_SEND:
     {
+        // PathPaymentStrictSend always allows INT64_MAX to be received at
+        // every hop, and exchange with a pool always happens as a unit
+        // (compare against the order book where multiple offers might execute
+        // in a hop).
+        if (maxReceiveFromPool != INT64_MAX)
+        {
+            throw std::runtime_error("strict send with bounded receive?");
+        }
+        // We can't receive more from the pool then it has reserves.
+        maxReceiveFromPool = reservesFromPool;
+
+        // We have to send this amount exactly, and we can't do it if that would
+        // overflow reserves.
         if (maxSendToPool > INT64_MAX - reservesToPool)
         {
             return false;
         }
         toPool = maxSendToPool;
 
+        // This can't overflow:
+        // - 0 <  reservesToPool <= INT64_MAX
+        // - 0 <= toPool <= INT64_MAX
+        // - 0 <  maxBps - feeBps <= maxBps <= 10000
+        //
+        // from which it follows that
+        //
+        // denominator
+        //  = maxBps * reservesToPool + (maxBps - feeBps) * toPool
+        // <= 10000 * INT64_MAX + 10000 * INT64_MAX
+        // <  UINT128_MAX
         uint128_t denominator = bigMultiply(maxBps, reservesToPool) +
                                 bigMultiply(maxBps - feeBps, toPool);
+
         bool res = hugeDivide(fromPool, maxBps - feeBps,
                               bigMultiply(reservesFromPool, toPool),
                               denominator, ROUND_DOWN);
-        if (res)
+
+        // To be defensive, we need a bound on fromPool. First, note that
+        //
+        // denominator
+        //  = maxBps * reservesToPool + (maxBps - feeBps) * toPool
+        // >= (maxBps - feeBps) * toPool
+        //
+        // Using this result, we can evaluate
+        //
+        // fromPool
+        //  = floor[(maxBps - feeBps) * reservesFromPool * toPool / denominator]
+        // <= (maxBps - feeBps) * reservesFromPool * toPool / denominator
+        // <= reservesFromPool
+        if (res && fromPool > maxReceiveFromPool)
         {
-            fromPool = std::min(fromPool, maxReceiveFromPool);
+            // This should never happen, see the above proof.
+            throw std::runtime_error("received too much from pool");
         }
-        return res;
+        if (res && fromPool < 0)
+        {
+            // This should never happen
+            throw std::runtime_error("fromPool is negative");
+        }
+
+        // Fail if the division overflows, or if we are receiving 0. It is
+        // possible to receive 0 due to the ROUND_DOWN.
+        return res && fromPool != 0;
     }
     case RoundingType::PATH_PAYMENT_STRICT_RECEIVE:
     {
+        // PathPaymentStrictReceive always allows INT64_MAX to be sent at every
+        // hop, and exchange with a pool always happens as a unit (compare
+        // against the order book where multiple offers might execute in a hop).
+        if (maxSendToPool != INT64_MAX)
+        {
+            throw std::runtime_error("strict receive with bounded send?");
+        }
+        // We can't send more to the pool then it has space for additional
+        // reserves.
+        maxSendToPool = INT64_MAX - reservesToPool;
+
+        // We have to receive this amount exactly, and we can't do it if that
+        // would deplete reserves entirely.
         if (maxReceiveFromPool >= reservesFromPool)
         {
             return false;
@@ -1270,18 +1344,134 @@ exchangeWithPool(int64_t reservesToPool, int64_t maxSendToPool, int64_t& toPool,
             toPool, maxBps, bigMultiply(reservesToPool, fromPool),
             bigMultiply(reservesFromPool - fromPool, maxBps - feeBps),
             ROUND_UP);
-        if (res)
+
+        if (res && toPool < 0)
         {
-            toPool = std::min(toPool, maxSendToPool);
+            // This should never happen
+            throw std::runtime_error("toPool is negative");
         }
-        return res;
+
+        // Fail if the division overflows, or if we would be sending too much to
+        // the pool.
+        return res && toPool <= maxSendToPool;
     }
     default:
         throw std::runtime_error("Invalid rounding type");
     }
 }
 
-ConvertResult
+PoolID
+getPoolID(Asset const& x, Asset const& y, int32_t feeBps)
+{
+    LiquidityPoolParameters lpp(LIQUIDITY_POOL_CONSTANT_PRODUCT);
+    auto& cp = lpp.constantProduct();
+    cp.assetA = std::min(x, y);
+    cp.assetB = std::max(x, y);
+    cp.fee = feeBps;
+    return xdrSha256(lpp);
+}
+
+static bool
+exchangeWithPool(AbstractLedgerTxn& ltxOuter, Asset const& toPoolAsset,
+                 int64_t maxSendToPool, int64_t& toPool,
+                 Asset const& fromPoolAsset, int64_t maxReceiveFromPool,
+                 int64_t& fromPool, RoundingType round,
+                 int64_t maxOffersToCross)
+{
+    LedgerTxn ltx(ltxOuter);
+
+    if (ltx.loadHeader().current().ledgerVersion < 18)
+    {
+        // Only exchange with pools starting at protocol version 18
+        return false;
+    }
+    if (isPoolTradingDisabled(ltx.loadHeader().current()))
+    {
+        return false;
+    }
+    if (round == RoundingType::NORMAL)
+    {
+        // Only exchange with pools for path payments
+        return false;
+    }
+    if (maxOffersToCross == 0)
+    {
+        // offerTrail is going to be too long after exchanging with the
+        // liquidity pool
+        // note that this condition can only happen in path payment when
+        // performing subsequent hops
+        return false;
+    }
+
+    int32_t const feeBps = LIQUIDITY_POOL_FEE_V18;
+    auto poolID = getPoolID(toPoolAsset, fromPoolAsset, feeBps);
+    auto lp = loadLiquidityPool(ltx, poolID);
+    if (!lp)
+    {
+        return false;
+    }
+
+    auto cp = [&lp]() -> auto&
+    {
+        return lp.current().data.liquidityPool().body.constantProduct();
+    };
+
+    if (cp().reserveA <= 0 || cp().reserveB <= 0)
+    {
+        // It is possible to have reserveA = reserveB = 0, specifically when a
+        // pool share trust line exists but no deposits have been made. It
+        // should not be possible to have either
+        //      reserveA = 0 && reserveB != 0
+        //      reserveA < 0 || reserveB < 0
+        // but for safety we disallow trading with the pool in those cases.
+        return false;
+    }
+
+    bool res = false;
+    if (toPoolAsset == cp().params.assetA &&
+        fromPoolAsset == cp().params.assetB)
+    {
+        res = exchangeWithPool(cp().reserveA, maxSendToPool, toPool,
+                               cp().reserveB, maxReceiveFromPool, fromPool,
+                               feeBps, round);
+        if (res)
+        {
+            if (!addBalance(cp().reserveA, toPool) ||
+                !addBalance(cp().reserveB, -fromPool))
+            {
+                throw std::runtime_error("could not update reserves");
+            }
+        }
+    }
+    else if (fromPoolAsset == cp().params.assetA &&
+             toPoolAsset == cp().params.assetB)
+    {
+        res = exchangeWithPool(cp().reserveB, maxSendToPool, toPool,
+                               cp().reserveA, maxReceiveFromPool, fromPool,
+                               feeBps, round);
+        if (res)
+        {
+            if (!addBalance(cp().reserveA, -fromPool) ||
+                !addBalance(cp().reserveB, toPool))
+            {
+                throw std::runtime_error("could not update reserves");
+            }
+        }
+    }
+    else
+    {
+        // We should never get here
+        throw std::runtime_error("Invalid liquidity pool assets");
+    }
+
+    if (res)
+    {
+        ltx.commit();
+    }
+    return res;
+}
+
+static ConvertResult
 convertWithOffers(
     AbstractLedgerTxn& ltxOuter, Asset const& sheep, int64_t maxSheepSend,
     int64_t& sheepSend, Asset const& wheat, int64_t maxWheatReceive,
@@ -1303,6 +1493,15 @@ convertWithOffers(
     wheatReceived = 0;
 
     bool needMore = (maxWheatReceive > 0 && maxSheepSend > 0);
+    if (needMore && maxOffersToCross == 0 &&
+        ltxOuter.loadHeader().current().ledgerVersion >= 18)
+    {
+        // offerTrail is going to be too long, fast fail
+        // note that this condition can only happen in path payment when
+        // performing subsequent hops
+        return ConvertResult::eCrossedTooMany;
+    }
+
     while (needMore)
     {
         LedgerTxn ltx(ltxOuter);
@@ -1326,9 +1525,19 @@ convertWithOffers(
             wheatOffer.current().ext.v1().sponsoringID.activate() = sponsorID;
         }
 
-        if (filter && filter(wheatOffer) == OfferFilterResult::eStop)
+        if (filter)
         {
-            return ConvertResult::eFilterStop;
+            switch (filter(wheatOffer))
+            {
+            case OfferFilterResult::eKeep:
+                break;
+            case OfferFilterResult::eStopBadPrice:
+                return ConvertResult::eFilterStopBadPrice;
+            case OfferFilterResult::eStopCrossSelf:
+                return ConvertResult::eFilterStopCrossSelf;
+            default:
+                throw std::runtime_error("unexpected filter result");
+            }
         }
 
         // Note: maxOffersToCross == INT64_MAX before protocol version 11
@@ -1390,5 +1599,132 @@ convertWithOffers(
     {
         return ConvertResult::ePartial;
     }
+}
+
+static bool
+shouldConvertWithOffers(std::optional<ExchangedQuantities> const& poolExchange,
+                        ExchangedQuantities const& bookExchange,
+                        ConvertResult convertRes)
+{
+    if (poolExchange)
+    {
+        // If we can do the exchange with the pool but not with the order book
+        // then use the pool
+        if (convertRes != ConvertResult::eOK)
+        {
+            return false;
+        }
+
+        // pE.sS * bE.wR > pE.wR * bE.sS is equivalent in arbitrary precision to
+        // bE.wR / bE.sS > pe.wR / pE.sS, but the first form avoids rounding in
+        // finite precision
+        //
+        // We want to use the liquidity pool unless the order book provides a
+        // strictly better price
+        return bigMultiply(poolExchange->sheepSend,
+                           bookExchange.wheatReceived) >
+               bigMultiply(poolExchange->wheatReceived, bookExchange.sheepSend);
+    }
+
+    // If we can't exchange with the pool then either
+    // - the exchange with the book succeeded so we should use that
+    // - the exchange with the book failed so we should return that error code
+    //   for compatibility with old behavior
+    return true;
+}
+
+// returns true if converting with offers, false otherwise
+static bool
+maybeConvertWithOffers(
+    AbstractLedgerTxn& ltxOuter, Asset const& sheep, int64_t maxSheepSend,
+    int64_t& sheepSend, Asset const& wheat, int64_t maxWheatReceive,
+    int64_t& wheatReceived, RoundingType round,
+    std::function<OfferFilterResult(LedgerTxnEntry const&)> filter,
+    std::vector<ClaimAtom>& offerTrail, int64_t maxOffersToCross,
+    ConvertResult& convertRes)
+{
+    // Compute the exchange from the liquidity pool but don't actually do the
+    // exchange
+    std::optional<ExchangedQuantities> poolExchange;
+    {
+        LedgerTxn ltxExchangeWithPool(ltxOuter); // Always rolls back
+        ExchangedQuantities res;
+        if (exchangeWithPool(ltxExchangeWithPool, sheep, maxSheepSend,
+                             res.sheepSend, wheat, maxWheatReceive,
+                             res.wheatReceived, round, maxOffersToCross))
+        {
+            poolExchange = std::make_optional<ExchangedQuantities>(res);
+        }
+    }
+
+    // Maybe use the order book
+    {
+        LedgerTxn ltxConvertWithOffers(ltxOuter);
+
+        std::vector<ClaimAtom> tempOfferTrail;
+        ExchangedQuantities bookExchange;
+        auto res = convertWithOffers(
+            ltxConvertWithOffers, sheep, maxSheepSend, bookExchange.sheepSend,
+            wheat, maxWheatReceive, bookExchange.wheatReceived, round, filter,
+            tempOfferTrail, maxOffersToCross);
+
+        if (shouldConvertWithOffers(poolExchange, bookExchange, res))
+        {
+            convertRes = res;
+            sheepSend = bookExchange.sheepSend;
+            wheatReceived = bookExchange.wheatReceived;
+            offerTrail = std::move(tempOfferTrail);
+            ltxConvertWithOffers.commit();
+            return true;
+        }
+    }
+
+    return false;
+}
+
+ConvertResult
+convertWithOffersAndPools(
+    AbstractLedgerTxn& ltxOuter, Asset const& sheep, int64_t maxSheepSend,
+    int64_t& sheepSend, Asset const& wheat, int64_t maxWheatReceive,
+    int64_t& wheatReceived, RoundingType round,
+    std::function<OfferFilterResult(LedgerTxnEntry const&)> filter,
+    std::vector<ClaimAtom>& offerTrail, int64_t maxOffersToCross)
+{
+    ZoneScoped;
+
+    // If offerTrail is not empty at the start, then the limit maxOffersToCross
+    // will not be imposed correctly.
+    releaseAssertOrThrow(offerTrail.empty());
+
+    sheepSend = 0;
+    wheatReceived = 0;
+
+    {
+        ConvertResult convertRes;
+        if (maybeConvertWithOffers(ltxOuter, sheep, maxSheepSend, sheepSend,
+                                   wheat, maxWheatReceive, wheatReceived, round,
+                                   filter, offerTrail, maxOffersToCross,
+                                   convertRes))
+        {
+            return convertRes;
+        }
+    }
+
+    // Ensure that there were no side effects from maybeConvertWithOffers (this
+    // should be a no-op)
+    offerTrail.clear();
+    sheepSend = 0;
+    wheatReceived = 0;
+
+    // Compute the exchange from the liquidity pool and actually do the exchange
+    exchangeWithPool(ltxOuter, sheep, maxSheepSend, sheepSend, wheat,
+                     maxWheatReceive, wheatReceived, round, maxOffersToCross);
+
+    ClaimAtom atom(CLAIM_ATOM_TYPE_LIQUIDITY_POOL);
+    atom.liquidityPool() =
+        ClaimLiquidityAtom(getPoolID(sheep, wheat, LIQUIDITY_POOL_FEE_V18),
+                           wheat, wheatReceived, sheep, sheepSend);
+    offerTrail.emplace_back(atom);
+    return ConvertResult::eOK;
 }
 }

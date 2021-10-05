@@ -27,7 +27,7 @@ InMemoryLedgerTxnRoot::InMemoryLedgerTxnRoot(
 }
 
 void
-InMemoryLedgerTxnRoot::addChild(AbstractLedgerTxn& child)
+InMemoryLedgerTxnRoot::addChild(AbstractLedgerTxn& child, TransactionMode mode)
 {
 }
 
@@ -154,6 +154,10 @@ uint32_t
 InMemoryLedgerTxnRoot::prefetch(UnorderedSet<LedgerKey> const& keys)
 {
     return 0;
+}
+
+void InMemoryLedgerTxnRoot::prepareNewObjects(size_t)
+{
 }
 
 #ifdef BUILD_TESTS

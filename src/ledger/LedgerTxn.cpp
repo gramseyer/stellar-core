@@ -223,18 +223,21 @@ AbstractLedgerTxn::~AbstractLedgerTxn()
 
 // Implementation of LedgerTxn ----------------------------------------------
 LedgerTxn::LedgerTxn(AbstractLedgerTxnParent& parent,
-                     bool shouldUpdateLastModified)
-    : mImpl(std::make_unique<Impl>(*this, parent, shouldUpdateLastModified))
+                     bool shouldUpdateLastModified, TransactionMode mode)
+    : mImpl(
+          std::make_unique<Impl>(*this, parent, shouldUpdateLastModified, mode))
 {
 }
 
-LedgerTxn::LedgerTxn(LedgerTxn& parent, bool shouldUpdateLastModified)
-    : LedgerTxn((AbstractLedgerTxnParent&)parent, shouldUpdateLastModified)
+LedgerTxn::LedgerTxn(LedgerTxn& parent, bool shouldUpdateLastModified,
+                     TransactionMode mode)
+    : LedgerTxn((AbstractLedgerTxnParent&)parent, shouldUpdateLastModified,
+                mode)
 {
 }
 
 LedgerTxn::Impl::Impl(LedgerTxn& self, AbstractLedgerTxnParent& parent,
-                      bool shouldUpdateLastModified)
+                      bool shouldUpdateLastModified, TransactionMode mode)
     : mParent(parent)
     , mChild(nullptr)
     , mHeader(std::make_unique<LedgerHeader>(mParent.getHeader()))
@@ -242,7 +245,7 @@ LedgerTxn::Impl::Impl(LedgerTxn& self, AbstractLedgerTxnParent& parent,
     , mIsSealed(false)
     , mConsistency(LedgerTxnConsistency::EXACT)
 {
-    mParent.addChild(self);
+    mParent.addChild(self, mode);
 }
 
 LedgerTxn::~LedgerTxn()
@@ -264,7 +267,7 @@ LedgerTxn::getImpl() const
 }
 
 void
-LedgerTxn::addChild(AbstractLedgerTxn& child)
+LedgerTxn::addChild(AbstractLedgerTxn& child, TransactionMode mode)
 {
     getImpl()->addChild(child);
 }
@@ -2125,6 +2128,28 @@ LedgerTxn::Impl::hasSponsorshipEntry() const
     return false;
 }
 
+void
+LedgerTxn::prepareNewObjects(size_t s)
+{
+    getImpl()->prepareNewObjects(s);
+}
+
+void
+LedgerTxn::Impl::prepareNewObjects(size_t s)
+{
+    size_t newSize = mEntry.size();
+    auto constexpr m = std::numeric_limits<size_t>::max();
+    if (newSize >= m - s)
+    {
+        newSize = m;
+    }
+    else
+    {
+        newSize += s;
+    }
+    mEntry.reserve(newSize);
+}
+
 #ifdef BUILD_TESTS
 UnorderedMap<AssetPair,
              std::multimap<OfferDescriptor, LedgerKey, IsBetterOfferComparator>,
@@ -2249,7 +2274,7 @@ LedgerTxnRoot::Impl::Impl(Database& db, size_t entryCacheSize,
                           )
     : mMaxBestOffersBatchSize(
           std::min(std::max(prefetchBatchSize, MIN_BEST_OFFERS_BATCH_SIZE),
-                   MAX_OFFERS_TO_CROSS))
+                   getMaxOffersToCross()))
     , mDatabase(db)
     , mHeader(std::make_unique<LedgerHeader>())
     , mEntryCache(entryCacheSize)
@@ -2289,19 +2314,31 @@ LedgerTxnRoot::resetForFuzzer()
 #endif // BUILD_TESTS
 
 void
-LedgerTxnRoot::addChild(AbstractLedgerTxn& child)
+LedgerTxnRoot::addChild(AbstractLedgerTxn& child, TransactionMode mode)
 {
-    mImpl->addChild(child);
+    mImpl->addChild(child, mode);
 }
 
 void
-LedgerTxnRoot::Impl::addChild(AbstractLedgerTxn& child)
+LedgerTxnRoot::Impl::addChild(AbstractLedgerTxn& child, TransactionMode mode)
 {
     if (mChild)
     {
         throw std::runtime_error("LedgerTxnRoot already has child");
     }
-    mTransaction = std::make_unique<soci::transaction>(mDatabase.getSession());
+
+    if (mode == TransactionMode::READ_WRITE_WITH_SQL_TXN)
+    {
+        mTransaction =
+            std::make_unique<soci::transaction>(mDatabase.getSession());
+    }
+    else
+    {
+        // Read-only transactions are only allowed on the main thread to ensure
+        // we're not competing with writes
+        assertThreadIsMain();
+    }
+
     mChild = &child;
 }
 
@@ -2447,6 +2484,16 @@ void
 LedgerTxnRoot::Impl::commitChild(EntryIterator iter, LedgerTxnConsistency cons)
 {
     ZoneScoped;
+
+    // In this mode, where we do not start a SQL transaction, so we crash if
+    // there's an attempt to commit, since the expected behavior is load and
+    // rollback.
+    if (!mTransaction)
+    {
+        throw std::runtime_error("Illegal action in LedgerTxnRoot: committing "
+                                 "child in read-only mode");
+    }
+
     // Assignment of xdrpp objects does not have the strong exception safety
     // guarantee, so use std::unique_ptr<...>::swap to achieve it
     auto childHeader = std::make_unique<LedgerHeader>(mChild->getHeader());
@@ -2746,6 +2793,16 @@ LedgerTxnRoot::Impl::getPrefetchHitRate() const
            (mPrefetchMisses + mPrefetchHits);
 }
 
+void
+LedgerTxnRoot::prepareNewObjects(size_t s)
+{
+    mImpl->prepareNewObjects(s);
+}
+
+void LedgerTxnRoot::Impl::prepareNewObjects(size_t)
+{
+}
+
 UnorderedMap<LedgerKey, LedgerEntry>
 LedgerTxnRoot::getAllOffers()
 {
@@ -3039,11 +3096,10 @@ LedgerTxnRoot::Impl::getBestOffer(Asset const& buying, Asset const& selling,
             populateEntryCacheFromBestOffers(iter, lastOfferIter);
         }
 
-        putInEntryCache(LedgerEntryKey(*iter),
-                        std::make_shared<LedgerEntry const>(*iter),
-                        LoadType::IMMEDIATE);
+        auto le = std::make_shared<LedgerEntry const>(*iter);
+        putInEntryCache(LedgerEntryKey(*iter), le, LoadType::IMMEDIATE);
 
-        return std::make_shared<LedgerEntry const>(*iter);
+        return le;
     }
     return nullptr;
 }
@@ -3257,20 +3313,24 @@ LedgerTxnRoot::rollbackChild()
 void
 LedgerTxnRoot::Impl::rollbackChild()
 {
-    try
+    if (mTransaction)
     {
-        mTransaction->rollback();
-        mTransaction.reset();
-    }
-    catch (std::exception& e)
-    {
-        printErrorAndAbort(
-            "fatal error when rolling back child of LedgerTxnRoot: ", e.what());
-    }
-    catch (...)
-    {
-        printErrorAndAbort(
-            "unknown fatal error when rolling back child of LedgerTxnRoot");
+        try
+        {
+            mTransaction->rollback();
+            mTransaction.reset();
+        }
+        catch (std::exception& e)
+        {
+            printErrorAndAbort(
+                "fatal error when rolling back child of LedgerTxnRoot: ",
+                e.what());
+        }
+        catch (...)
+        {
+            printErrorAndAbort(
+                "unknown fatal error when rolling back child of LedgerTxnRoot");
+        }
     }
 
     mChild = nullptr;

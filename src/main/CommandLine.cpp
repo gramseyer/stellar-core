@@ -14,6 +14,7 @@
 #include "main/Application.h"
 #include "main/ApplicationUtils.h"
 #include "main/Config.h"
+#include "main/Diagnostics.h"
 #include "main/ErrorMessages.h"
 #include "main/PersistentState.h"
 #include "main/StellarCoreVersion.h"
@@ -218,7 +219,7 @@ compactParser(bool& compact)
 clara::Opt
 base64Parser(bool& base64)
 {
-    return clara::Opt{base64}["--base64"]("use base64");
+    return clara::Opt{base64}["--base64"]("batch process base64 encoded input");
 }
 
 clara::Opt
@@ -604,6 +605,23 @@ CommandLine::writeToStream(std::string const& exeName, std::ostream& os) const
         os << row << std::endl;
     }
 }
+}
+
+int
+diagBucketStats(CommandLineArgs const& args)
+{
+    std::string bucketFile;
+    bool aggAccountStats = false;
+
+    return runWithHelp(
+        args,
+        {fileNameParser(bucketFile),
+         clara::Opt{aggAccountStats}["--aggregate-account-stats"](
+             "aggregate entries on a per account basis")},
+        [&] {
+            diagnostics::bucketStats(bucketFile, aggAccountStats);
+            return 0;
+        });
 }
 
 int
@@ -1101,7 +1119,8 @@ runPrintXdr(CommandLineArgs const& args)
     auto rawMode = false;
 
     auto fileTypeOpt = clara::Opt(fileType, "FILE-TYPE")["--filetype"](
-        "[auto|ledgerheader|meta|result|resultpair|tx|txfee]");
+        "[auto|asset|ledgerentry|ledgerheader|meta|result|resultpair|tx|"
+        "txfee]");
 
     return runWithHelp(args,
                        {fileNameParser(xdr), fileTypeOpt, base64Parser(base64),
@@ -1503,8 +1522,18 @@ runSimulateBuckets(CommandLineArgs const& args)
                 hdrIn.open(ft.localPath_nogz());
                 LedgerHeaderHistoryEntry curr;
                 // Read the last LedgerHeaderHistoryEntry to use as LCL
-                while (hdrIn && hdrIn.readOne(curr))
-                    ;
+                try
+                {
+                    while (hdrIn && hdrIn.readOne(curr))
+                        ;
+                }
+                catch (xdr::xdr_bad_message_size&)
+                {
+                    LOG_ERROR(DEFAULT_LOG,
+                              "Failed to read LedgerHeaderHistoryEntry. "
+                              "Version upgrade is likely required");
+                    return 1;
+                }
 
                 LOG_INFO(DEFAULT_LOG, "Assuming state for ledger {}",
                          curr.header.ledgerSeq);
@@ -1608,6 +1637,8 @@ handleCommandLine(int argc, char* const* argv)
          {"verify-checkpoints", "write verified checkpoint ledger hashes",
           runWriteVerifiedCheckpointHashes},
          {"convert-id", "displays ID in all known forms", runConvertId},
+         {"diag-bucket-stats", "reports statistics on the content of a bucket",
+          diagBucketStats},
          {"dump-xdr", "dump an XDR file, for debugging", runDumpXDR},
          {"encode-asset", "Print an encoded asset in base 64 for debugging",
           runEncodeAsset},

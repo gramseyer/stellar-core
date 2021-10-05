@@ -291,14 +291,16 @@ bool exchangeWithPool(int64_t reservesToPool, int64_t maxSendToPool,
 enum class OfferFilterResult
 {
     eKeep,
-    eStop
+    eStopBadPrice,
+    eStopCrossSelf
 };
 
 enum class ConvertResult
 {
     eOK,
     ePartial,
-    eFilterStop,
+    eFilterStopBadPrice,
+    eFilterStopCrossSelf,
     eCrossedTooMany
 };
 
@@ -309,11 +311,16 @@ enum class CrossOfferResult
     eOfferCantConvert
 };
 
-// buys wheat with sheep, crossing as many offers as necessary
-ConvertResult convertWithOffers(
+// buys wheat with sheep, crossing as many offers as necessary or using a
+// liquidity pool
+ConvertResult convertWithOffersAndPools(
     AbstractLedgerTxn& ltx, Asset const& sheep, int64_t maxSheepSent,
     int64_t& sheepSend, Asset const& wheat, int64_t maxWheatReceive,
     int64_t& wheatReceived, RoundingType round,
     std::function<OfferFilterResult(LedgerTxnEntry const&)> filter,
     std::vector<ClaimAtom>& offerTrail, int64_t maxOffersToCross);
+
+// Compute a PoolID as needed for offer exchange. Determines the correct order
+// for x and y.
+PoolID getPoolID(Asset const& x, Asset const& y, int32_t feeBps);
 }

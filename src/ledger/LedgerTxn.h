@@ -217,6 +217,12 @@ enum class LedgerTxnConsistency
     EXTRA_DELETES
 };
 
+enum class TransactionMode
+{
+    READ_ONLY_WITHOUT_SQL_TXN,
+    READ_WRITE_WITH_SQL_TXN
+};
+
 class Database;
 struct InflationVotes;
 struct LedgerEntry;
@@ -357,7 +363,7 @@ class AbstractLedgerTxnParent
     // addChild is called by a newly constructed AbstractLedgerTxn to become a
     // child of AbstractLedgerTxnParent. Throws if AbstractLedgerTxnParent
     // is in the sealed state or already has a child.
-    virtual void addChild(AbstractLedgerTxn& child) = 0;
+    virtual void addChild(AbstractLedgerTxn& child, TransactionMode mode) = 0;
 
     // commitChild and rollbackChild are called by a child AbstractLedgerTxn
     // to trigger an atomic commit or an atomic rollback of the data stored in
@@ -457,6 +463,9 @@ class AbstractLedgerTxnParent
     // work, while still being correct. Will throw when called on anything other
     // than a (real or stub) root LedgerTxn.
     virtual uint32_t prefetch(UnorderedSet<LedgerKey> const& keys) = 0;
+
+    // prepares to increase the capacity of pending changes by up to "s" changes
+    virtual void prepareNewObjects(size_t s) = 0;
 
 #ifdef BUILD_TESTS
     virtual void resetForFuzzer() = 0;
@@ -635,13 +644,21 @@ class LedgerTxn : public AbstractLedgerTxn
     std::unique_ptr<Impl> const& getImpl() const;
 
   public:
-    explicit LedgerTxn(AbstractLedgerTxnParent& parent,
-                       bool shouldUpdateLastModified = true);
-    explicit LedgerTxn(LedgerTxn& parent, bool shouldUpdateLastModified = true);
+    // WARNING: use useTransaction flag with caution. It does not start a SQL
+    // transaction, which uses the strongest SERIALIZABLE level isolation.
+    // Therefore, if you have concurrent transactions, you are risking getting
+    // inconsistent view of the database. Only use this mode for read-only
+    // transactions with no concurrent writers present.
+    explicit LedgerTxn(
+        AbstractLedgerTxnParent& parent, bool shouldUpdateLastModified = true,
+        TransactionMode mode = TransactionMode::READ_WRITE_WITH_SQL_TXN);
+    explicit LedgerTxn(
+        LedgerTxn& parent, bool shouldUpdateLastModified = true,
+        TransactionMode mode = TransactionMode::READ_WRITE_WITH_SQL_TXN);
 
     virtual ~LedgerTxn();
 
-    void addChild(AbstractLedgerTxn& child) override;
+    void addChild(AbstractLedgerTxn& child, TransactionMode mode) override;
 
     void commit() override;
 
@@ -730,6 +747,7 @@ class LedgerTxn : public AbstractLedgerTxn
     void dropLiquidityPools() override;
     double getPrefetchHitRate() const override;
     uint32_t prefetch(UnorderedSet<LedgerKey> const& keys) override;
+    void prepareNewObjects(size_t s) override;
 
     bool hasSponsorshipEntry() const override;
 
@@ -769,7 +787,7 @@ class LedgerTxnRoot : public AbstractLedgerTxnParent
 
     virtual ~LedgerTxnRoot();
 
-    void addChild(AbstractLedgerTxn& child) override;
+    void addChild(AbstractLedgerTxn& child, TransactionMode mode) override;
 
     void commitChild(EntryIterator iter, LedgerTxnConsistency cons) override;
 
@@ -818,6 +836,8 @@ class LedgerTxnRoot : public AbstractLedgerTxnParent
 
     uint32_t prefetch(UnorderedSet<LedgerKey> const& keys) override;
     double getPrefetchHitRate() const override;
+
+    void prepareNewObjects(size_t s) override;
 
 #ifdef BEST_OFFER_DEBUGGING
     bool bestOfferDebuggingEnabled() const override;

@@ -30,7 +30,7 @@
 
 namespace stellar
 {
-const uint32 Config::CURRENT_LEDGER_PROTOCOL_VERSION = 17
+const uint32 Config::CURRENT_LEDGER_PROTOCOL_VERSION = 18
 #ifdef ENABLE_NEXT_PROTOCOL_VERSION_UNSAFE_FOR_PRODUCTION
                                                        + 1
 #endif
@@ -119,8 +119,8 @@ Config::Config() : NODE_SEED(SecretKey::random())
 
     MAXIMUM_LEDGER_CLOSETIME_DRIFT = 50;
 
-    OVERLAY_PROTOCOL_MIN_VERSION = 16;
-    OVERLAY_PROTOCOL_VERSION = 17;
+    OVERLAY_PROTOCOL_MIN_VERSION = 17;
+    OVERLAY_PROTOCOL_VERSION = 18;
 
     VERSION_STR = STELLAR_CORE_VERSION;
 
@@ -131,15 +131,15 @@ Config::Config() : NODE_SEED(SecretKey::random())
     CATCHUP_RECENT = 0;
     EXPERIMENTAL_PRECAUTION_DELAY_META = false;
     // automatic maintenance settings:
-    // 11 minutes is relatively short and prime with 1 hour
-    // which will cause automatic maintenance to rarely conflict with any other
-    // scheduled tasks on a machine (that tend to run on a fixed schedule)
-    AUTOMATIC_MAINTENANCE_PERIOD = std::chrono::seconds{11 * 60};
+    // short and prime with 1 hour which will cause automatic maintenance to
+    // rarely conflict with any other scheduled tasks on a machine (that tend to
+    // run on a fixed schedule)
+    AUTOMATIC_MAINTENANCE_PERIOD = std::chrono::seconds{359};
     // count picked as to catchup with 1 month worth of ledgers
     // in about 1 week.
-    // (30*24*3600/5) / (700 - (11*60)/5 ) // number of periods
-    //   * (11*60) / (24*3600) = 6.97 days
-    AUTOMATIC_MAINTENANCE_COUNT = 700;
+    // (30*24*3600/5) / (400 - 359/5 ) // number of periods needed to catchup
+    //   * (359) / (24*3600) = 6.56 days
+    AUTOMATIC_MAINTENANCE_COUNT = 400;
     // automatic self-check happens once every 3 hours
     AUTOMATIC_SELF_CHECK_PERIOD = std::chrono::seconds{3 * 60 * 60};
     ARTIFICIALLY_GENERATE_LOAD_FOR_TESTING = false;
@@ -166,6 +166,7 @@ Config::Config() : NODE_SEED(SecretKey::random())
     TESTING_UPGRADE_DESIRED_FEE = LedgerManager::GENESIS_LEDGER_BASE_FEE;
     TESTING_UPGRADE_RESERVE = LedgerManager::GENESIS_LEDGER_BASE_RESERVE;
     TESTING_UPGRADE_MAX_TX_SET_SIZE = 50;
+    TESTING_UPGRADE_FLAGS = 0;
 
     HTTP_PORT = DEFAULT_PEER_PORT + 1;
     PUBLIC_HTTP_PORT = false;
@@ -276,6 +277,31 @@ readArray(ConfigItem const& item)
 
 template <typename T>
 T
+castInt(int64_t v, std::string const& name, T min, T max)
+{
+    if (std::is_signed_v<T>)
+    {
+        if (v < min || v > max)
+        {
+            throw std::invalid_argument(fmt::format("bad '{}'", name));
+        }
+    }
+    else if (v < 0)
+    {
+        throw std::invalid_argument(fmt::format("bad '{}'", name));
+    }
+    else
+    {
+        if (static_cast<T>(v) < min || static_cast<T>(v) > max)
+        {
+            throw std::invalid_argument(fmt::format("bad '{}'", name));
+        }
+    }
+    return static_cast<T>(v);
+}
+
+template <typename T>
+T
 readInt(ConfigItem const& item, T min = std::numeric_limits<T>::min(),
         T max = std::numeric_limits<T>::max())
 {
@@ -283,26 +309,21 @@ readInt(ConfigItem const& item, T min = std::numeric_limits<T>::min(),
     {
         throw std::invalid_argument(fmt::format("invalid '{}'", item.first));
     }
-    int64_t v = item.second->as<int64_t>()->get();
-    if (std::is_signed_v<T>)
-    {
-        if (v < min || v > max)
-        {
-            throw std::invalid_argument(fmt::format("bad '{}'", item.first));
-        }
-    }
-    else if (v < 0)
-    {
-        throw std::invalid_argument(fmt::format("bad '{}'", item.first));
-    }
-    else
-    {
-        if (static_cast<T>(v) < min || static_cast<T>(v) > max)
-        {
-            throw std::invalid_argument(fmt::format("bad '{}'", item.first));
-        }
-    }
-    return static_cast<T>(v);
+    return castInt<T>(item.second->as<int64_t>()->get(), item.first, min, max);
+}
+
+template <typename T>
+std::vector<T>
+readIntArray(ConfigItem const& item, T min = std::numeric_limits<T>::min(),
+             T max = std::numeric_limits<T>::max())
+{
+    auto resultInt64 = readArray<int64_t>(item);
+    auto result = std::vector<T>{};
+    result.reserve(resultInt64.size());
+    std::transform(
+        resultInt64.begin(), resultInt64.end(), std::back_inserter(result),
+        [&](int64_t v) { return castInt<T>(v, item.first, min, max); });
+    return result;
 }
 
 template <typename T>
@@ -746,8 +767,13 @@ Config::verifyLoadGenOpCountForTestingConfigs()
                                     "must be defined together and "
                                     "must have the exact same size.");
     }
-    else if (!LOADGEN_OP_COUNT_FOR_TESTING.empty() &&
-             !ARTIFICIALLY_GENERATE_LOAD_FOR_TESTING)
+
+    if (LOADGEN_OP_COUNT_FOR_TESTING.empty())
+    {
+        return;
+    }
+
+    if (!ARTIFICIALLY_GENERATE_LOAD_FOR_TESTING)
     {
         throw std::invalid_argument(
             "When LOADGEN_OP_COUNT_FOR_TESTING and "
@@ -755,12 +781,21 @@ Config::verifyLoadGenOpCountForTestingConfigs()
             "ARTIFICIALLY_GENERATE_LOAD_FOR_TESTING must be set true");
     }
 
+    if (std::any_of(LOADGEN_OP_COUNT_DISTRIBUTION_FOR_TESTING.begin(),
+                    LOADGEN_OP_COUNT_DISTRIBUTION_FOR_TESTING.end(),
+                    [](unsigned short i) { return i == 0; }))
+    {
+        throw std::invalid_argument(
+            "All elements in LOADGEN_OP_COUNT_DISTRIBUTION_FOR_TESTING must be "
+            "positive integers");
+    }
+
     if (!std::all_of(LOADGEN_OP_COUNT_FOR_TESTING.begin(),
                      LOADGEN_OP_COUNT_FOR_TESTING.end(),
                      [](unsigned short i) { return 1 <= i && i <= 100; }))
     {
         throw std::invalid_argument(
-            "All elements in NUM_OPS_PER_TX_COUNT_FOR_TESTING must be "
+            "All elements in LOADGEN_OP_COUNT_FOR_TESTING must be "
             "integers in [1, 100]");
     }
 }
@@ -775,6 +810,20 @@ Config::processOpApplySleepTimeForTestingConfigs()
             "OP_APPLY_SLEEP_TIME_DURATION_FOR_TESTING and "
             "OP_APPLY_SLEEP_TIME_WEIGHT_FOR_TESTING must be defined together "
             "and have the same size");
+    }
+
+    if (OP_APPLY_SLEEP_TIME_WEIGHT_FOR_TESTING.empty())
+    {
+        return;
+    }
+
+    if (std::any_of(OP_APPLY_SLEEP_TIME_WEIGHT_FOR_TESTING.begin(),
+                    OP_APPLY_SLEEP_TIME_WEIGHT_FOR_TESTING.end(),
+                    [](unsigned short i) { return i == 0; }))
+    {
+        throw std::invalid_argument(
+            "All elements in OP_APPLY_SLEEP_TIME_WEIGHT_FOR_TESTING must be "
+            "positive integers");
     }
 
     auto sum = std::accumulate(OP_APPLY_SLEEP_TIME_WEIGHT_FOR_TESTING.begin(),
@@ -1029,7 +1078,7 @@ Config::processConfig(std::shared_ptr<cpptoml::table> t)
             }
             else if (item.first == "FLOOD_TX_PERIOD_MS")
             {
-                FLOOD_TX_PERIOD_MS = readInt<int>(item, 0);
+                FLOOD_TX_PERIOD_MS = readInt<int>(item, 1);
             }
             else if (item.first == "PREFERRED_PEERS")
             {
@@ -1166,45 +1215,31 @@ Config::processConfig(std::shared_ptr<cpptoml::table> t)
             }
             else if (item.first == "OP_APPLY_SLEEP_TIME_DURATION_FOR_TESTING")
             {
-                auto input = readArray<int64_t>(item);
+                // Since it doesn't make sense to sleep for a negative amount of
+                // time, we use an unsigned integer type.
+                auto input = readIntArray<uint32>(item);
                 OP_APPLY_SLEEP_TIME_DURATION_FOR_TESTING.reserve(input.size());
-                // Convert int64_t to std::chrono::microseconds
+                // Convert uint32 to std::chrono::microseconds
                 std::transform(
                     input.begin(), input.end(),
                     std::back_inserter(
                         OP_APPLY_SLEEP_TIME_DURATION_FOR_TESTING),
-                    [](int64_t x) { return std::chrono::microseconds(x); });
+                    [](uint32 x) { return std::chrono::microseconds(x); });
             }
             else if (item.first == "OP_APPLY_SLEEP_TIME_WEIGHT_FOR_TESTING")
             {
-                auto input = readArray<int64_t>(item);
-                OP_APPLY_SLEEP_TIME_WEIGHT_FOR_TESTING.reserve(input.size());
-                // Convert int64_t to uint32
-                std::transform(
-                    input.begin(), input.end(),
-                    std::back_inserter(OP_APPLY_SLEEP_TIME_WEIGHT_FOR_TESTING),
-                    [](int64_t x) { return static_cast<uint32>(x); });
+                OP_APPLY_SLEEP_TIME_WEIGHT_FOR_TESTING =
+                    readIntArray<uint32>(item);
             }
             else if (item.first == "LOADGEN_OP_COUNT_FOR_TESTING")
             {
-                auto input = readArray<int64_t>(item);
-                LOADGEN_OP_COUNT_FOR_TESTING.reserve(input.size());
-                // Convert int64_t to unsigned short
-                std::transform(
-                    input.begin(), input.end(),
-                    std::back_inserter(LOADGEN_OP_COUNT_FOR_TESTING),
-                    [](int64_t x) { return static_cast<unsigned short>(x); });
+                LOADGEN_OP_COUNT_FOR_TESTING =
+                    readIntArray<unsigned short>(item);
             }
             else if (item.first == "LOADGEN_OP_COUNT_DISTRIBUTION_FOR_TESTING")
             {
-                auto input = readArray<int64_t>(item);
-                LOADGEN_OP_COUNT_DISTRIBUTION_FOR_TESTING.reserve(input.size());
-                // Convert int64_t to uint32
-                std::transform(
-                    input.begin(), input.end(),
-                    std::back_inserter(
-                        LOADGEN_OP_COUNT_DISTRIBUTION_FOR_TESTING),
-                    [](int64_t x) { return static_cast<uint32>(x); });
+                LOADGEN_OP_COUNT_DISTRIBUTION_FOR_TESTING =
+                    readIntArray<uint32>(item);
             }
             else
             {
@@ -1839,6 +1874,5 @@ Config::toString(SCPQuorumSet const& qset)
     return fw.write(json);
 }
 
-std::string const Config::STDIN_SPECIAL_NAME = "/dev/stdin";
-
+std::string const Config::STDIN_SPECIAL_NAME = "stdin";
 }

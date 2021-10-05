@@ -104,6 +104,17 @@ AS_IF([test "x$enable_asan" = "xyes"], [
   sanitizeopts="address"
 ])
 
+AC_ARG_ENABLE([codecoverage],
+  AS_HELP_STRING([--enable-codecoverage],
+        [build with code coverage enabled]))
+AS_IF([test "x$enable_codecoverage" = "xyes"], [
+  AC_MSG_NOTICE([ enabling codecoverage, see https://clang.llvm.org/docs/SourceBasedCodeCoverage.html ])
+
+  LDFLAGS="$LDFLAGS -fprofile-instr-generate -fcoverage-mapping"
+  CXXFLAGS="$CXXFLAGS -fprofile-instr-generate -fcoverage-mapping"
+  CFLAGS="$CFLAGS -fprofile-instr-generate -fcoverage-mapping"
+])
+
 AC_ARG_ENABLE([memcheck],
   AS_HELP_STRING([--enable-memcheck],
         [build with memcheck (memory-sanitizer) instrumentation]))
@@ -354,6 +365,11 @@ AC_ARG_ENABLE(tracy-capture,
     AS_HELP_STRING([--enable-tracy-capture],
         [Enable 'tracy' profiler/tracer capture program]))
 AM_CONDITIONAL(USE_TRACY_CAPTURE, [test x$enable_tracy_capture = xyes])
+
+AC_ARG_ENABLE(tracy-csvexport,
+    AS_HELP_STRING([--enable-tracy-csvexport],
+        [Enable 'tracy' profiler/tracer csvexport program]))
+AM_CONDITIONAL(USE_TRACY_CSVEXPORT, [test x$enable_tracy_csvexport = xyes])
 
 AC_ARG_ENABLE(spdlog,
     AS_HELP_STRING([--disable-spdlog],
