@@ -609,6 +609,19 @@ struct TransactionV0Envelope
     DecoratedSignature signatures<20>;
 };
 
+enum TransactionExecutionFlags {
+    COMMUTATIVE_PHASE = 0x1 
+};
+
+struct TransactionExecutionFlagExtV1 {
+    uint32 flags;
+    union switch (int v)
+    {
+    case 0:
+        void;
+    } ext;
+};
+
 /* a transaction is a container for a set of operations
     - is executed by an account
     - fees are collected from the account
@@ -639,6 +652,8 @@ struct Transaction
     {
     case 0:
         void;
+    case 1:
+        TransactionExecutionFlagExtV1 v1;
     }
     ext;
 };
