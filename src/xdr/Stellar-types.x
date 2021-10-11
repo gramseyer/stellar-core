@@ -14,6 +14,8 @@ typedef int int32;
 typedef unsigned hyper uint64;
 typedef hyper int64;
 
+typedef opaque int128[16];
+
 enum CryptoKeyType
 {
     KEY_TYPE_ED25519 = 0,

@@ -213,13 +213,16 @@ enum TrustLineFlags
     AUTHORIZED_TO_MAINTAIN_LIABILITIES_FLAG = 2,
     // issuer has specified that it may clawback its credit, and that claimable
     // balances created with its credit may also be clawed back
-    TRUSTLINE_CLAWBACK_ENABLED_FLAG = 4
+    TRUSTLINE_CLAWBACK_ENABLED_FLAG = 4,
+    // trustline limit is ignored
+    IGNORE_TRUSTLINE_LIMIT = 8
 };
 
 // mask for all trustline flags
 const MASK_TRUSTLINE_FLAGS = 1;
 const MASK_TRUSTLINE_FLAGS_V13 = 3;
 const MASK_TRUSTLINE_FLAGS_V17 = 7;
+const MASK_TRUSTLINE_FLAGS_VXX = 15;
 
 enum LiquidityPoolType
 {
@@ -243,6 +246,15 @@ case ASSET_TYPE_POOL_SHARE:
     // add other asset types here in the future
 };
 
+struct TrustLineEntryExtensionV3
+{
+    int128 balanceOverflow;
+    union switch (int v) {
+    case 0:
+        void;
+    } ext;
+};
+
 struct TrustLineEntryExtensionV2
 {
     int32 liquidityPoolUseCount;
@@ -251,6 +263,8 @@ struct TrustLineEntryExtensionV2
     {
     case 0:
         void;
+    case 3:
+        TrustLineEntryExtensionV3 v3;
     }
     ext;
 };
