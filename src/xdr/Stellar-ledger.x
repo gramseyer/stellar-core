@@ -184,6 +184,27 @@ struct TransactionSet
     TransactionEnvelope txs<>;
 };
 
+struct TransactionSetV2
+{
+    Hash previousLedgerHash;
+    TransactionEnvelope txs<>;
+    TatonnementConfigs tatonnementConfigs;
+    union switch (int v)
+    {
+    case 0:
+        void;
+    }
+    ext;
+};
+
+union TransactionSetEnvelope switch(int v)
+{
+case 1:
+    TransactionSet txSet;
+case 2:
+    TransactionSetV2 txSetV2;
+};
+
 struct TransactionResultPair
 {
     Hash transactionHash;
@@ -205,6 +226,20 @@ struct TransactionHistoryEntry
 
     // reserved for future use
     union switch (int v)
+    {
+    case 0:
+        void;
+    }
+    ext;
+};
+
+struct TransactionHistoryEntryV2
+{
+    uint32 ledgerSeq;
+    TransactionSetEnvelope txSet;
+
+    // reserved for future use
+    union switch(int v)
     {
     case 0:
         void;
@@ -358,9 +393,29 @@ struct LedgerCloseMetaV0
     SCPHistoryEntry scpInfo<>;
 };
 
+struct LedgerCloseMetaV1
+{
+    LedgerHeaderHistoryEntry ledgerHeader;
+    // NB: txSet is sorted in "Hash order"
+    TransactionSetEnvelope txSet;
+
+    // NB: transactions are sorted in apply order here
+    // fees for all transactions are processed first
+    // followed by applying transactions
+    TransactionResultMeta txProcessing<>;
+
+    // upgrades are applied last
+    UpgradeEntryMeta upgradesProcessing<>;
+
+    // other misc information attached to the ledger close
+    SCPHistoryEntry scpInfo<>;
+};
+
 union LedgerCloseMeta switch (int v)
 {
 case 0:
     LedgerCloseMetaV0 v0;
+case 1:
+    LedgerCloseMetaV1 v1;
 };
 }
