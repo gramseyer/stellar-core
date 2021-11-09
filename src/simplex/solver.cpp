@@ -197,6 +197,7 @@ std::optional<size_t>
 TradeMaximizingSolver::getNextPivotIndex() const {
 	auto& objRow = mCoefficients.front();
 	for (size_t i = 0; i < objRow.first.size(); i++) {
+		//TODO mActiveYijs[i] is potentially an out of bounds access
 		if (objRow.first[i] > 0 && mActiveYijs[i]) {
 			return i;
 		}
@@ -246,6 +247,7 @@ TradeMaximizingSolver::doPivot() {
 
 	if (debugPrints)
 		std::printf("pivot col %lu pivot row %lu coeff %d\n", *nextPivotIdx, nextPivotConstraint, coeff);
+	//TODO is this correct?  Or should multiplyRow go after the for loop?
 	multiplyRow(nextPivotConstraint, coeff);
 	if (debugPrints)
 		std::printf("post mult\n");
