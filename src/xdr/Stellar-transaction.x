@@ -57,7 +57,8 @@ enum OperationType
     CLAWBACK_CLAIMABLE_BALANCE = 20,
     SET_TRUST_LINE_FLAGS = 21,
     LIQUIDITY_POOL_DEPOSIT = 22,
-    LIQUIDITY_POOL_WITHDRAW = 23
+    LIQUIDITY_POOL_WITHDRAW = 23,
+    CREATE_SPEEDEX_IOC_OFFER = 24
 };
 
 /* CreateAccount
@@ -465,6 +466,30 @@ struct LiquidityPoolWithdrawOp
     int64 minAmountB;     // minimum amount of second asset to withdraw
 };
 
+/* CreateSpeedexIOCOfferOp
+    Create Speedex IoC (Immediate-or-Cancel) offer.
+    Threshold: med
+    Trades sellAmount units of sellAsset at minimum
+    rate of minPrice;
+*/
+
+struct CreateSpeedexIOCOfferOp
+{
+    Asset sellAsset;
+    Asset buyAsset;
+    int64 sellAmount;
+    Price minPrice;
+};
+
+//tie breaks in offer sorting are determined by hash(SpeedexIOCOfferHashContents)
+struct SpeedexIOCOfferHashContents
+{
+    AccountID sourceAccount;
+    Price minPrice;
+    uint64 seqNum;
+    uint32 opIdx;
+};
+
 /* An operation is the lowest unit of work that a transaction does */
 struct Operation
 {
@@ -523,6 +548,8 @@ struct Operation
         LiquidityPoolDepositOp liquidityPoolDepositOp;
     case LIQUIDITY_POOL_WITHDRAW:
         LiquidityPoolWithdrawOp liquidityPoolWithdrawOp;
+    case CREATE_SPEEDEX_IOC_OFFER:
+        CreateSpeedexIOCOfferOp createSpeedexIOCOfferOp;
     }
     body;
 };
@@ -1415,6 +1442,26 @@ default:
     void;
 };
 
+/******* CreateSpeedexIOCOffer Result ********/
+
+enum CreateSpeedexIOCOfferResultCode
+{
+    // codes considered as "success" for the operation
+    CREATE_SPEEDEX_IOC_OFFER_SUCCESS = 0,
+
+    // codes considered as "failure" for the operation
+    CREATE_SPEEDEX_IOC_OFFER_NO_SPEEDEX_CONFIG = -1,
+    CREATE_SPEEDEX_IOC_OFFER_INVALID_TRADING_PAIR = -2,
+    CREATE_SPEEDEX_IOC_OFFER_INSUFFICIENT_BALANCE = -3,
+    CREATE_SPEEDEX_IOC_OFFER_MALFORMED = -4
+};
+
+union CreateSpeedexIOCOfferResult switch (CreateSpeedexIOCOfferResultCode code)
+{
+default:
+    void;
+};
+
 /* High level Operation Result */
 enum OperationResultCode
 {
@@ -1481,6 +1528,8 @@ case opINNER:
         LiquidityPoolDepositResult liquidityPoolDepositResult;
     case LIQUIDITY_POOL_WITHDRAW:
         LiquidityPoolWithdrawResult liquidityPoolWithdrawResult;
+    case CREATE_SPEEDEX_IOC_OFFER:
+        CreateSpeedexIOCOfferResult createSpeedexIOCOfferResult;
     }
     tr;
 default:

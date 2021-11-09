@@ -4,6 +4,7 @@
 
 %#include "xdr/Stellar-SCP.h"
 %#include "xdr/Stellar-transaction.h"
+%#include "xdr/Stellar-speedex.h"
 
 namespace stellar
 {
@@ -76,7 +77,7 @@ struct LedgerHeader
     uint32 ledgerVersion;    // the protocol version of the ledger
     Hash previousLedgerHash; // hash of the previous ledger header
     StellarValue scpValue;   // what consensus agreed to
-    Hash txSetResultHash;    // the TransactionResultSet that led to this ledger
+    Hash txSetResultHash;    // the TransactionResultSetEnvelope that led to this ledger
     Hash bucketListHash;     // hash of the ledger state
 
     uint32 ledgerSeq; // sequence number of this ledger
@@ -196,6 +197,26 @@ struct TransactionResultSet
     TransactionResultPair results<>;
 };
 
+struct TransactionResultSetV2
+{
+    TransactionResultPair results<>;
+    SpeedexResults speedexResults;
+    union switch(int v)
+    {
+    case 0:
+        void;
+    }
+    ext;
+};
+
+union TransactionResultsSetEnvelope switch(int v)
+{
+case 1:
+    TransactionResultSet results;
+case 2:
+    TransactionResultSetV2 results;
+};
+
 // Entries below are used in the historical subsystem
 
 struct TransactionHistoryEntry
@@ -218,6 +239,20 @@ struct TransactionHistoryResultEntry
     TransactionResultSet txResultSet;
 
     // reserved for future use
+    union switch (int v)
+    {
+    case 0:
+        void;
+    }
+    ext;
+};
+
+struct TransactionHistoryResultEntryV2
+{
+    uint32 ledgerSeq;
+    TransactionResultEnvelope txResultSet;
+
+    //reserved for future use
     union switch (int v)
     {
     case 0:
@@ -358,9 +393,31 @@ struct LedgerCloseMetaV0
     SCPHistoryEntry scpInfo<>;
 };
 
+struct LedgerCloseMetaV1
+{
+    LedgerHeaderHistoryEntry ledgerHeader;
+    // NB: txSet is sorted in "Hash order"
+    TransactionSet txSet;
+
+    // NB: transactions are sorted in apply order here
+    // fees for all transactions are processed first
+    // followed by applying transactions
+    TransactionResultMeta txProcessing<>;
+
+    SpeedexResults speedexResults;
+
+    // upgrades are applied last
+    UpgradeEntryMeta upgradesProcessing<>;
+
+    // other misc information attached to the ledger close
+    SCPHistoryEntry scpInfo<>;
+};
+
 union LedgerCloseMeta switch (int v)
 {
 case 0:
     LedgerCloseMetaV0 v0;
+case 1:
+    LedgerCloseMetaV1 v1;
 };
 }
