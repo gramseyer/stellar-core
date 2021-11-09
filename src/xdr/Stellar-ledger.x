@@ -184,11 +184,21 @@ struct TransactionSet
     TransactionEnvelope txs<>;
 };
 
+enum TxOptionsType {
+    TATONNEMENT_CONFIGS = 0
+};
+
+union TxOptions switch (TxOptionsType options)
+{
+case TATONNEMENT_CONFIGS:
+    TatonnementConfigs tatonnementConfigs;
+};
+
 struct TransactionSetV2
 {
     Hash previousLedgerHash;
     TransactionEnvelope txs<>;
-    TatonnementConfigs tatonnementConfigs;
+    TxOptions txOptions<>;
     union switch (int v)
     {
     case 0:
