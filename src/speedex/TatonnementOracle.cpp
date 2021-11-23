@@ -41,9 +41,12 @@ TatonnementOracle::computePrices(TatonnementControlParams const& params, std::ma
 		{
 			prices = trialPrices;
 
-			baselineDemand = mDemandOracle.demandQuery(prices, controlParams.smoothMult());
+			baselineDemand = trialDemand;
+			baselineObjective = trialObjective;
+
+			//baselineDemand = mDemandOracle.demandQuery(prices, controlParams.smoothMult());
 						
-			baselineObjective = baselineDemand.getObjective();
+			//baselineObjective = baselineDemand.getObjective();
 
 			stepSize = controlParams.stepUp(std::max(stepSize, controlParams.kMinStepSize));
 		} else {
