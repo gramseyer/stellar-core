@@ -1404,6 +1404,8 @@ enum CreateSpeedexIOCOfferResultCode
 
 union CreateSpeedexIOCOfferResult switch (CreateSpeedexIOCOfferResultCode code)
 {
+case CREATE_SPEEDEX_IOC_OFFER_SUCCESS:
+    void;
 default:
     void;
 };

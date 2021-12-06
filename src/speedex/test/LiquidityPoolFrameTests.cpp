@@ -4,6 +4,9 @@
 #include "ledger/AssetPair.h"
 #include "ledger/LedgerTxn.h"
 
+#include "speedex/LiquidityPoolFrame.h"
+#include "speedex/LiquidityPoolFrameBase.h"
+
 #include "test/TxTests.h"
 
 #include "test/TestUtils.h"
@@ -92,7 +95,7 @@ TEST_CASE("lp trade amounts", "[speedex]")
     {
         createLiquidityPool(pair1.selling, pair1.buying, 1003, 1000, ltx);
 
-        BaseLiquidityPoolFrame baseFrame(ltx, pair1);
+        LiquidityPoolFrameBaseLtx baseFrame(ltx, pair1);
 
         LiquidityPoolFrame frame(baseFrame, pair1);
 
@@ -110,7 +113,7 @@ TEST_CASE("lp trade amounts", "[speedex]")
     {
     	createLiquidityPool(pair1.selling, pair1.buying, 1000, 1000, ltx, 0);
 
-    	BaseLiquidityPoolFrame baseFrame(ltx, pair1);
+    	LiquidityPoolFrameBaseLtx baseFrame(ltx, pair1);
 
         LiquidityPoolFrame frame(baseFrame, pair1);
     	
@@ -125,11 +128,11 @@ TEST_CASE("lp trade amounts", "[speedex]")
         createLiquidityPool(pair1.selling, pair1.buying, 1000, 1000, ltx);
         createLiquidityPool(pair2.selling, pair2.buying, 200, 5000, ltx);
 
-        BaseLiquidityPoolFrame baseFrame1(ltx, pair1);
+        LiquidityPoolFrameBaseLtx baseFrame1(ltx, pair1);
 
         LiquidityPoolFrame frame1(baseFrame1, pair1);
         
-        BaseLiquidityPoolFrame baseFrame2(ltx, pair2);
+        LiquidityPoolFrameBaseLtx baseFrame2(ltx, pair2);
 
         LiquidityPoolFrame frame2(baseFrame2, pair2);
 

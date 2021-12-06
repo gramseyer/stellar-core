@@ -1,4 +1,5 @@
 #include "speedex/LiquidityPoolFrame.h"
+#include "speedex/LiquidityPoolFrameBase.h"
 
 #include "ledger/LedgerTxn.h"
 
@@ -12,21 +13,10 @@
 
 namespace stellar {
 
-BaseLiquidityPoolFrame::BaseLiquidityPoolFrame(AbstractLedgerTxn& ltx, AssetPair const& assetPair)
-{
-	auto poolID = getPoolID(assetPair.selling, assetPair.buying);
-	mEntry = loadLiquidityPool(ltx, poolID) ;
-}
-
-BaseLiquidityPoolFrame::operator bool() const {
-	return (bool) mEntry;
-}
-
-LiquidityPoolFrame::LiquidityPoolFrame(BaseLiquidityPoolFrame& baseFrame, AssetPair const& tradingPair)
+LiquidityPoolFrame::LiquidityPoolFrame(LiquidityPoolFrameBase& baseFrame, AssetPair const& tradingPair)
 	: mBaseFrame(baseFrame)
 	, mTradingPair (tradingPair)
 {
-
 }
 
 LiquidityPoolFrame::operator bool() const {
@@ -35,12 +25,14 @@ LiquidityPoolFrame::operator bool() const {
 
 std::pair<int64_t, int64_t> 
 LiquidityPoolFrame::getSellBuyAmounts() const {
-	if (!mBaseFrame.mEntry) {
+	if (!mBaseFrame) {
 		return std::make_pair<int64_t, int64_t>(0, 0);
 	}
 
-	int64_t reserveA = mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveA;
-	int64_t reserveB = mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveB;
+	auto [reserveA, reserveB] = mBaseFrame.getReserves();
+
+//	int64_t reserveA = mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveA;
+//	int64_t reserveB = mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveB;
 
 	if (mTradingPair.selling < mTradingPair.buying) {
 		return {reserveA, reserveB};
@@ -54,7 +46,7 @@ LiquidityPoolFrame::getFeeRate() const {
 	if (!mBaseFrame) {
 		return 0.0;
 	}
-	return (((double) mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().params.fee) / (10000.0));
+	return (((double) mBaseFrame.getFee()) / (10000.0));
 }
 
 uint32_t
@@ -62,7 +54,7 @@ LiquidityPoolFrame::getFixedPointFeeRate() const {
 	if (!mBaseFrame) {
 		return 0;
 	}
-	return mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().params.fee;
+	return mBaseFrame.getFee();
 }
 
 uint64_t
@@ -285,16 +277,18 @@ LiquidityPoolFrame::doTransfer(int64_t sellAmount, int64_t buyAmount, uint64_t s
 	assertValidTrade(sellAmount, buyAmount, sellPrice, buyPrice);
 
 	if (mTradingPair.selling < mTradingPair.buying) {
-		mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveA -= sellAmount;
-		mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveB += buyAmount;
+		mBaseFrame.transfer(-sellAmount, buyAmount);
+	//	mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveA -= sellAmount;
+	//	mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveB += buyAmount;
 	} else {
-		mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveB -= sellAmount;
-		mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveA += buyAmount;
+		mBaseFrame.transfer(buyAmount, -sellAmount);
+		//mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveB -= sellAmount;
+		//mBaseFrame.mEntry.current().data.liquidityPool().body.constantProduct().reserveA += buyAmount;
 	}
 
 	SpeedexLiquidityPoolClearingStatus status;
 
-	status.pool = mBaseFrame.mEntry.current().data.liquidityPool().liquidityPoolID;
+	status.pool = mBaseFrame.poolID();
     status.soldAsset = mTradingPair.selling;
     status.boughtAsset = mTradingPair.buying;
     status.soldAmount = sellAmount;

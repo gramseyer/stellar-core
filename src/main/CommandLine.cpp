@@ -26,6 +26,9 @@
 #include "util/types.h"
 #include "work/WorkScheduler.h"
 
+#include "xdr/speedex-sim.h"
+#include <xdrpp/marshal.h>
+
 #ifdef BUILD_TESTS
 #include "test/Fuzzer.h"
 #include "test/fuzz.h"
@@ -1598,6 +1601,43 @@ runGenFuzz(CommandLineArgs const& args)
 #endif
 
 int
+runSpeedexSim(CommandLineArgs const& args) {
+    std::string fileName;
+
+    return runWithHelp(
+        args,
+        {fileNameParser(fileName)},
+        [&] {
+
+            std::printf("loading from %s\n", fileName.c_str());
+
+            SpeedexSimulation sim;
+
+            using namespace std;
+            {
+                ostringstream input;
+                ifstream file(fileName.c_str());
+                if (!file)
+                {
+                    throw std::runtime_error(std::string("nonexistent file ") + fileName);
+                }
+                file.exceptions(std::ios::badbit);
+                input << file.rdbuf();
+
+                auto str = input.str();
+
+                xdr::opaque_vec<> v{str.begin(), str.end()};
+
+                xdr::xdr_from_opaque(v, sim);
+            }
+
+            std::printf("read file");
+
+            return 0;
+        });
+}
+
+int
 handleCommandLine(int argc, char* const* argv)
 {
     auto commandLine = CommandLine{
@@ -1640,6 +1680,9 @@ handleCommandLine(int argc, char* const* argv)
          {"sign-transaction",
           "add signature to transaction envelope, then quit",
           runSignTransaction},
+         {"speedex",
+          "speedex simulation",
+           runSpeedexSim},
          {"upgrade-db", "upgrade database schema to current version",
           runUpgradeDB},
 #ifdef BUILD_TESTS

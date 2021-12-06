@@ -1,6 +1,7 @@
 #pragma once
 
 #include "xdr/Stellar-ledger.h"
+#include "xdr/speedex-sim.h"
 
 namespace stellar
 {

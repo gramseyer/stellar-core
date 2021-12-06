@@ -8,6 +8,14 @@ struct AssetPair
 {
     Asset buying;
     Asset selling;
+
+    AssetPair reverse() const {
+        return AssetPair
+        {
+            .buying = selling,
+            .selling = buying
+        };
+    }
 };
 bool operator==(AssetPair const& lhs, AssetPair const& rhs);
 

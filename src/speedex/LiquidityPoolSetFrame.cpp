@@ -3,6 +3,7 @@
 #include "ledger/LedgerTxn.h"
 
 #include "speedex/DemandUtils.h"
+#include "speedex/sim_utils.h"
 
 #include <utility>
 
@@ -13,10 +14,6 @@ namespace stellar
 
 LiquidityPoolSetFrame::LiquidityPoolSetFrame(std::vector<Asset> const& assets, AbstractLedgerTxn& ltx)
 {
-	size_t numLPBaseFrames = ((assets.size()) * (assets.size() - 1)) / 2;
-
-	mBaseFrames.reserve(numLPBaseFrames);
-
 	for (auto const& sellAsset : assets) {
 		for (auto const& buyAsset : assets) {
 			if (sellAsset < buyAsset) {
@@ -31,20 +28,41 @@ LiquidityPoolSetFrame::LiquidityPoolSetFrame(std::vector<Asset> const& assets, A
 					.buying = sellAsset
 				};
 
-				mBaseFrames.emplace_back(ltx, pair1);
-				if (mBaseFrames.size() > numLPBaseFrames) {
-					throw std::runtime_error("overflow base frames!");
-				}
+				mBaseFrames.emplace_back(std::make_unique<LiquidityPoolFrameBaseLtx>(ltx, pair1));
 
 				mLiquidityPools.emplace(std::piecewise_construct,
 					std::forward_as_tuple(pair1),
-					std::forward_as_tuple(mBaseFrames.back(), pair1));
+					std::forward_as_tuple(*mBaseFrames.back(), pair1));
 
 				mLiquidityPools.emplace(std::piecewise_construct,
 					std::forward_as_tuple(pair2),
-					std::forward_as_tuple(mBaseFrames.back(), pair2));
+					std::forward_as_tuple(*mBaseFrames.back(), pair2));
 			}
 		}
+	}
+}
+
+LiquidityPoolSetFrame::LiquidityPoolSetFrame(SpeedexSimConfig const& sim)
+{
+	for (auto const& ammconfig : sim.ammConfigs)
+	{
+		AssetPair p = AssetPair{
+			.selling = makeSimAsset(ammconfig.assetA),
+			.buying = makeSimAsset(ammconfig.assetB)
+		};
+		if (p.buying < p.selling) {
+			p = p.reverse();
+		}
+
+		mBaseFrames.emplace_back(std::make_unique<LiquidityPoolFrameBaseSim>(ammconfig));
+
+		mLiquidityPools.emplace(std::piecewise_construct,
+			std::forward_as_tuple(p),
+			std::forward_as_tuple(*mBaseFrames.back(), p));
+		p = p.reverse();
+		mLiquidityPools.emplace(std::piecewise_construct,
+			std::forward_as_tuple(p),
+			std::forward_as_tuple(*mBaseFrames.back(), p));
 	}
 }
 
