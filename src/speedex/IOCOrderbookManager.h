@@ -68,6 +68,9 @@ public:
 	demandQueryOneAssetPair(
 		AssetPair const& tradingPair, 
 		std::map<Asset, uint64_t> const& prices) const; //smooth mult = 0
+
+	SpeedexResults
+	clearSimBatch(const BatchSolution& batchSolution, LiquidityPoolSetFrame& liquidityPools);
 };
 
 }

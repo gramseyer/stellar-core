@@ -130,6 +130,36 @@ runSpeedexSim(SpeedexSimulation const& sim)
     checkSimOffers(sim, speedexConfig);
 
     auto orderbooks = makeOrderbooks(sim);
+
+    LiquidityPoolSetFrame lps(sim);
+
+    DemandOracle demandOracle(speedexOrderbooks, liquidityPools);
+
+    TatonnementOracle oracle(demandOracle);
+
+    TatonnementControlParams controls = speedexConfig.getControls();
+    auto prices = speedexConfig.getStartingPrices();
+
+    oracle.computePrices(controls, prices, printDiagnostics ? 1 : 0);
+
+    if (printDiagnostics)
+    {
+        std::printf("PRICES\n");
+        for (auto const& [asset, price] : prices)
+        {
+            std::printf("%llu\n", price);
+        }
+    }
+
+    TradeMaximizingSolver solver(speedexConfig.getAssets());
+
+    demandOracle.setSolverUpperBounds(solver, prices);
+
+    solver.doSolve();
+
+    BatchSolution solution(solver.getSolution(), prices);
+
+    return orderbooks.clearSimBatch(solution, liquidityPools);
 }
 
 } /* stellar */
