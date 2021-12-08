@@ -197,48 +197,48 @@ IOCOrderbook::cumulativeOfferedForSaleTimesPrice(uint64_t sellPrice, uint64_t bu
 			 executes not at all if offer.minPrice > p,
 	     and executes x-fractionally in the interim
 
-	     for x = (p - offer.minPrice) / (p * 2^smoothMult);
+	     for x = (p - offer.minPrice) / (p * 2^{-smoothMult});
 
 	Note that x\in[0,1] and offer execution is a continuous function.
 
 
 	Considering only offers in the interim gap:
 
-	amount sold = \Sigma_i ((p-offers[i].mP) / (p * 2^smoothMult)) * offer.amount
-				= \Sigma_i (offer.amount) / (2^smoothMult) - \Sigma_i (offer.amount * offer.mP) / (p * 2^smoothMult)
+	amount sold = \Sigma_i ((p-offers[i].minPrice) / (p * 2^{-smoothMult}) * offers[i].amount)
+				= \Sigma_i (offers[i].amount) / (2^{-smoothMult}) - \Sigma_i (offers[i].amount * offers[i].minPrice) / (p * 2^{-smoothMult})
 
 	amount sold * sellPrice (== amount bought * buyPrice)
-		= 2^{-smoothMult} * (
-				\Sigma_i offer.amount * sellPrice
-			  - \Sigma_i offer.amount * offer.mP * sellPrice / (sellPrice / buyPrice)
+		= 2^{smoothMult} * (
+				\Sigma_i offers[i].amount * sellPrice
+			  - \Sigma_i offers[i].amount * offers[i].minPrice * sellPrice / (sellPrice / buyPrice)
 			)
-		= 2^{-smoothMult} * (
-				\Sigma_i offer.amount * sellPrice
-			  - \Sigma_i offer.amount * offer.mP * buyPrice
+		= 2^{smoothMult} * (
+				\Sigma_i offers[i].amount * sellPrice
+			  - \Sigma_i offers[i].amount * offers[i].minPrice * buyPrice
 			)
 
 
-	Since smooth_mult division can be done with just a bitshift, his avoids any divisions!
+	Since smooth_mult division can be done with just a bitshift, this avoids any divisions!
 
 	Hence, we precompute answers to queries of the form
-		* \Sigma_{i : offer[i].mp < p} offer[i].amount
-		* \Sigma_{i : offer[i].mp < p} offer[i].amount * offer[i].mP
+		* \Sigma_{i : offers[i].minPrice < p} offers[i].amount
+		* \Sigma_{i : offers[i].minPrice < p} offers[i].amount * offers[i].minPrice
 
-	Note that offer.mP < sellPrice / buyPrice, for these offers.
+	Note that offers[i].minPrice < sellPrice / buyPrice, for these offers.
 
-	Hence, offer.mP * buyPrice < sellPrice
+	Hence, offers[i].minPrice * buyPrice < sellPrice
 
 	How wide do the intermediate results need to be?
 
-	\Sigma_i offer[i].amount < INT64_MAX by assumption.
+	\Sigma_i offers[i].amount < INT64_MAX by assumption.
 
 
 	Stellar's notion of price is (32 bits) / (32 bits).
 
 	Tatonnement *might* be easier with wider prices internally, so we have sellPrice and buyPrice as 64 bits each.
 
-	\Sigma_i offer[i].amount * sellPrice fits within INT128_MAX.
-	\Sigma_i offer[i].amount * offer[i].mP fits with no (well, essentially no, people who put non-dyadic p.d are weird) precision loss 
+	\Sigma_i offers[i].amount * sellPrice fits within INT128_MAX.
+	\Sigma_i offers[i].amount * offers[i].minPrice fits with no (well, essentially no, people who put non-dyadic p.d are weird) precision loss 
 		if we represent query answers as 128 bits (96 bits . 32 bits)
 
 		However, by the assumption above, multiplying this by buyPrice is always safe, if we drop the low 32 bits during the multiplication.
