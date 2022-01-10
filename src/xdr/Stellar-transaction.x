@@ -476,7 +476,7 @@ struct LiquidityPoolWithdrawOp
 struct AssetIssuanceSetLimitOp
 {
     TrustlineAsset asset;
-    int64 limit;
+    int64* limit;
 };
 
 /* Set Asset Issuance Options
@@ -1458,7 +1458,8 @@ enum AssetIssuanceSetLimitResultCode
     //codes considered as "failure" for the operation
     ASSET_ISSUANCE_SET_LIMIT_BELOW_ISSUANCE = -1,  // 0 <= limit < issued amount
     ASSET_ISSUANCE_SET_LIMIT_INVALID_LIMIT = -2,   // limit < 0
-    ASSET_ISSUANCE_SET_LIMIT_LOW_RESERVE = -3      // insufficient XLM reserves for new ledger entry
+    ASSET_ISSUANCE_SET_LIMIT_LOW_RESERVE = -3,     // insufficient XLM reserves for new ledger entry
+    ASSET_ISSUANCE_SET_LIMIT_LOCKED = -4           // limit already locked, can't change
 };
 
 union AssetIssuanceSetLimitResult switch (
@@ -1479,7 +1480,8 @@ enum AssetIssuanceSetOptionsResultCode
 
     //codes considered as "failure" for the operation
     ASSET_ISSUANCE_SET_OPTIONS_NO_LIMIT = -1,    // can't fix limit if no limit set
-    ASSET_ISSUANCE_SET_OPTIONS_MALFORMED = -2    // malformed options
+    ASSET_ISSUANCE_SET_OPTIONS_MALFORMED = -2,   // malformed options
+    ASSET_ISSUANCE_SET_OPTIONS_LOW_RESERVE = -3  // insufficient reserves for new ledger entry
 };
 
 union AssetIssuanceSetOptionsResult switch (
