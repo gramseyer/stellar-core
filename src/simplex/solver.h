@@ -28,7 +28,6 @@ class TradeMaximizingSolver {
 	using col_idx_t = size_t;
 
 	UnorderedMap<Asset, size_t> mIndexMap; // asset to number
-	//UnorderedMap<size_t, Asset> mReverseIndexMap;  // number to asset
 
 	UnorderedMap<AssetPair, row_idx_t, AssetPairHash> mAssetPairToRowMap;
 
