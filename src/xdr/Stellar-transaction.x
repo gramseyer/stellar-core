@@ -58,7 +58,8 @@ enum OperationType
     SET_TRUST_LINE_FLAGS = 21,
     LIQUIDITY_POOL_DEPOSIT = 22,
     LIQUIDITY_POOL_WITHDRAW = 23,
-    ASSET_ISSUANCE_SET_LIMIT = 24
+    ASSET_ISSUANCE_SET_LIMIT = 24,
+    ASSET_ISSUANCE_SET_OPTIONS = 25
 };
 
 /* CreateAccount
@@ -478,6 +479,21 @@ struct AssetIssuanceSetLimitOp
     int64 limit;
 };
 
+/* Set Asset Issuance Options
+
+    Threshold: med
+
+    Result: AssetIssuanceSetOptionsResult
+*/
+
+struct AssetIssuanceSetOptionsOp
+{
+    TrustlineAsset asset;
+    uint32 flags;
+};
+
+
+
 /* An operation is the lowest unit of work that a transaction does */
 struct Operation
 {
@@ -538,6 +554,8 @@ struct Operation
         LiquidityPoolWithdrawOp liquidityPoolWithdrawOp;
     case ASSET_ISSUANCE_SET_LIMIT:
         AssetIssuanceSetLimitOp assetIssuanceSetLimitOp;
+    case ASSET_ISSUANCE_SET_OPTIONS:
+        AssetIssuanceSetOptionsOp assetIssuanceSetOptionsOp;
     }
     body;
 };
@@ -1452,6 +1470,27 @@ default:
     void;
 };
 
+/******* AssetIssuanceSetOptions Result ********/
+
+enum AssetIssuanceSetOptionsResultCode
+{
+    // codes considered as "success" for the operation
+    ASSET_ISSUANCE_SET_OPTIONS_SUCCESS = 0,
+
+    //codes considered as "failure" for the operation
+    ASSET_ISSUANCE_SET_OPTIONS_NO_LIMIT = -1,    // can't fix limit if no limit set
+    ASSET_ISSUANCE_SET_OPTIONS_MALFORMED = -2    // malformed options
+};
+
+union AssetIssuanceSetOptionsResult switch (
+    AssetIssuanceSetOptionsResultCode code)
+{
+case ASSET_ISSUANCE_SET_OPTIONS_SUCCESS:
+    void;
+default:
+    void;
+};
+
 /* High level Operation Result */
 enum OperationResultCode
 {
@@ -1520,6 +1559,8 @@ case opINNER:
         LiquidityPoolWithdrawResult liquidityPoolWithdrawResult;
     case ASSET_ISSUANCE_SET_LIMIT:
         AssetIssuanceSetLimitResult assetIssuanceSetLimitResult;
+    case ASSET_ISSUANCE_SET_OPTIONS:
+        AssetIssuanceSetOptionsResult assetIssuanceSetOptionsResult;
     }
     tr;
 default:

@@ -476,6 +476,7 @@ struct LiquidityPoolEntry
 
 enum AssetFlags
 {
+    ASSET_FLAGS_ISSUANCE_LIMIT_LOCKED = 0
 };
 
 struct IssuerTrustlineEntry
