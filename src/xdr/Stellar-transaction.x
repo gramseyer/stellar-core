@@ -57,7 +57,8 @@ enum OperationType
     CLAWBACK_CLAIMABLE_BALANCE = 20,
     SET_TRUST_LINE_FLAGS = 21,
     LIQUIDITY_POOL_DEPOSIT = 22,
-    LIQUIDITY_POOL_WITHDRAW = 23
+    LIQUIDITY_POOL_WITHDRAW = 23,
+    ASSET_ISSUANCE_SET_LIMIT = 24
 };
 
 /* CreateAccount
@@ -465,6 +466,18 @@ struct LiquidityPoolWithdrawOp
     int64 minAmountB;     // minimum amount of second asset to withdraw
 };
 
+/* Set Asset Issuance Limit
+
+    Threshold: med
+
+    Result: AssetIssuanceSetLimitResult
+*/
+struct AssetIssuanceSetLimitOp
+{
+    TrustlineAsset asset;
+    int64 limit;
+};
+
 /* An operation is the lowest unit of work that a transaction does */
 struct Operation
 {
@@ -523,6 +536,8 @@ struct Operation
         LiquidityPoolDepositOp liquidityPoolDepositOp;
     case LIQUIDITY_POOL_WITHDRAW:
         LiquidityPoolWithdrawOp liquidityPoolWithdrawOp;
+    case ASSET_ISSUANCE_SET_LIMIT:
+        AssetIssuanceSetLimitOp assetIssuanceSetLimitOp;
     }
     body;
 };
@@ -1415,6 +1430,28 @@ default:
     void;
 };
 
+/******* AssetIssuanceSetLimit Result ********/
+
+enum AssetIssuanceSetLimitResultCode
+{
+    // codes considered as "success" for the operation
+    ASSET_ISSUANCE_SET_LIMIT_SUCCESS = 0,
+
+    //codes considered as "failure" for the operation
+    ASSET_ISSUANCE_SET_LIMIT_BELOW_ISSUANCE = -1,  // 0 <= limit < issued amount
+    ASSET_ISSUANCE_SET_LIMIT_INVALID_LIMIT = -2,   // limit < 0
+    ASSET_ISSUANCE_SET_LIMIT_LOW_RESERVE = -3      // insufficient XLM reserves for new ledger entry
+};
+
+union AssetIssuanceSetLimitResult switch (
+    AssetIssuanceSetLimitResultCode code)
+{
+case ASSET_ISSUANCE_SET_LIMIT_SUCCESS:
+    void;
+default:
+    void;
+};
+
 /* High level Operation Result */
 enum OperationResultCode
 {
@@ -1481,6 +1518,8 @@ case opINNER:
         LiquidityPoolDepositResult liquidityPoolDepositResult;
     case LIQUIDITY_POOL_WITHDRAW:
         LiquidityPoolWithdrawResult liquidityPoolWithdrawResult;
+    case ASSET_ISSUANCE_SET_LIMIT:
+        AssetIssuanceSetLimitResult assetIssuanceSetLimitResult;
     }
     tr;
 default:
