@@ -97,7 +97,8 @@ enum LedgerEntryType
     OFFER = 2,
     DATA = 3,
     CLAIMABLE_BALANCE = 4,
-    LIQUIDITY_POOL = 5
+    LIQUIDITY_POOL = 5,
+    ISSUER_TRUSTLINE = 6
 };
 
 struct Signer
@@ -473,6 +474,24 @@ struct LiquidityPoolEntry
     body;
 };
 
+enum AssetFlags
+{
+};
+
+struct IssuerTrustlineEntry
+{
+    int64* issuanceLimit;
+    uint32 flags;
+
+    //reserved for future use
+    union switch (int v)
+    {
+    case 0:
+        void;
+    }
+    ext;
+};
+
 struct LedgerEntryExtensionV1
 {
     SponsorshipDescriptor sponsoringID;
@@ -503,6 +522,8 @@ struct LedgerEntry
         ClaimableBalanceEntry claimableBalance;
     case LIQUIDITY_POOL:
         LiquidityPoolEntry liquidityPool;
+    case ISSUER_TRUSTLINE:
+        IssuerTrustlineEntry issuerTrustline;
     }
     data;
 
@@ -557,6 +578,12 @@ case LIQUIDITY_POOL:
     {
         PoolID liquidityPoolID;
     } liquidityPool;
+case ISSUER_TRUSTLINE:
+    struct
+    {
+        AccountID issuer;
+        TrustlineAsset asset;
+    } issuerTrustline;
 };
 
 // list of all envelope types used in the application
