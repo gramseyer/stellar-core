@@ -31,7 +31,7 @@ class TradeMaximizingSolver {
 
 	UnorderedMap<AssetPair, row_idx_t, AssetPairHash> mAssetPairToRowMap;
 
-	std::vector<bool> mActiveYijs;
+	std::vector<bool> mActiveCols;//mActiveYijs;
 
 	UnorderedMap<std::pair<size_t, size_t>, int128_t> mSolutionMap;
 

@@ -141,7 +141,7 @@ TradeMaximizingSolver::TradeMaximizingSolver(std::vector<Asset> assets)
 		mActiveBasis[row_idx] = slackVarIdx;
 	}
 
-	mActiveYijs.resize(numYijVars(), false);
+	mActiveCols.resize(numVars(), false);
 
 	if (debugPrints)
 		std::printf("start tableau:\n");
@@ -183,7 +183,14 @@ TradeMaximizingSolver::setUpperBound(AssetPair const& assetPair, int128_t upperB
 	row.second = upperBound;
 
 	mActiveBasis[rowIdx] = eIdx;
-	mActiveYijs[yIdx] = true;
+	mActiveCols[yIdx] = true;
+	mActiveCols[eIdx] = true;
+
+	auto sellAssetSlack = numYijEijVars() + mIndexMap[assetPair.selling];
+	auto buyAssetSlack = numYijEijVars() + mIndexMap[assetPair.buying];
+
+	mActiveCols[sellAssetSlack] = true;
+	mActiveCols[buyAssetSlack] = true;
 
 	auto& objectiveRow = mCoefficients.front();
 	objectiveRow.first[yIdx] = 1;
@@ -197,8 +204,8 @@ std::optional<size_t>
 TradeMaximizingSolver::getNextPivotIndex() const {
 	auto& objRow = mCoefficients.front();
 	for (size_t i = 0; i < objRow.first.size(); i++) {
-		//TODO mActiveYijs[i] is potentially an out of bounds access
-		if (objRow.first[i] > 0 && mActiveYijs[i]) {
+		
+		if (objRow.first[i] > 0 && mActiveCols[i]) {
 			return i;
 		}
 	}
@@ -322,7 +329,7 @@ TradeMaximizingSolver::constructSolution()
 	}
 
 	for (auto yij = 0u; yij < solvedYijs.size(); yij++) {
-		if (!mActiveYijs[yij]) {
+		if (!mActiveCols[yij]) {
 			solvedYijs[yij] = true;
 			auto indexPair = *varIndexToIndexPair(yij);
 			mSolutionMap[indexPair] = 0;
