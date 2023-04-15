@@ -1,3 +1,13 @@
+# SPEEDEX: A Scalable, Parallelizable, and Economically Efficient Decentralized EXchange
+
+This repository contains an implementation of SPEEDEX integrated as a component of the Stellar blockchain.
+For a detailed description
+ of the design,
+please refer to our NSDI'23 paper (https://arxiv.org/pdf/2111.02719.pdf).
+
+The core SPEEDEX logic lies under `src/speedex/`.  For a high-performance standalone implementation of SPEEDEX,
+please refer to (https://github.com/scslab/speedex).
+
 <div align="center">
 <a href="https://stellar.org"><img alt="Stellar" src="https://github.com/stellar/.github/raw/master/stellar-logo.png" width="558" /></a>
 <br/>
